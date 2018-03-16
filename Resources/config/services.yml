@@ -1,0 +1,43 @@
+services:
+    glavweb_data_schema.data_schema_factory:
+        class:  Glavweb\DataSchemaBundle\DataSchema\DataSchemaFactory
+        public: true
+        arguments:
+            - "@doctrine"
+            - "@glavweb_data_schema.data_transformer_registry"
+            - "@glavweb_data_schema.persister_factory"
+            - "@security.authorization_checker"
+            - "@glavweb_data_schema.placeholder"
+            - "@glavweb_data_schema.orm_object_hydrator"
+            - "%glavweb_data_schema.data_schema_dir%"
+            - "%glavweb_data_schema.scope_dir%"
+            - "%glavweb_data_schema.default_hydrator_mode%"
+
+    glavweb_data_schema.placeholder:
+        class:  Glavweb\DataSchemaBundle\DataSchema\Placeholder
+        arguments:
+            - "@annotation_reader"
+            - "@security.token_storage"
+            - "@twig.extension.security"
+
+    glavweb_data_schema.persister_factory:
+        class:  Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory
+        arguments: ["@doctrine"]
+
+    glavweb_data_schema.data_transformer_registry:
+        class:  Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry
+
+    glavweb_data_schema.orm_object_hydrator:
+        class:  Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator
+        arguments: ["@doctrine"]
+
+    # Commands
+    glavweb_data_schema.generate_data_schema_command:
+        class: Glavweb\DataSchemaBundle\Command\GenerateDataSchemaCommand
+        tags:
+            - { name: console.command, command: "glavweb:data-schema" }
+
+    glavweb_data_schema.generate_scope_command:
+        class: Glavweb\DataSchemaBundle\Command\GenerateScopeCommand
+        tags:
+            - { name: console.command, command: "glavweb:scope" }
