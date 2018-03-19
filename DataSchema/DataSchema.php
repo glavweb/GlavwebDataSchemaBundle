@@ -202,6 +202,15 @@ class DataSchema
             if (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
 
+                if ($value === null) {
+                    if (in_array($propertyConfig['type'], ['array', 'json_array'])) {
+                        $value = [];
+
+                    } elseif ($config['filter_null_values']) {
+                        continue;
+                    }
+                }
+
             } elseif (isset($propertyConfig['source']) && isset($data[$propertyConfig['source']])) {
                 $value = $data[$propertyConfig['source']];
 
@@ -421,6 +430,11 @@ class DataSchema
         // condition
         if (!isset($configuration['conditions'])) {
             $configuration['conditions'] = [];
+        }
+
+        // filter_null_values
+        if (!isset($configuration['filter_null_values'])) {
+            $configuration['filter_null_values'] = true;
         }
 
         // inject properties
