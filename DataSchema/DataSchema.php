@@ -461,26 +461,6 @@ class DataSchema
             }
 
             foreach ($properties as $propertyName => $propertyConfig) {
-                $isAssociationField =
-                    isset($propertyConfig['properties']) ||
-                    isset($propertyConfig['schema'])
-                ;
-
-                $isRemove =
-                    $scopeConfig !== null &&
-                    !in_array($propertyName, $identifierFieldNames) &&
-                    empty($propertyConfig['hidden']) &&
-                    !array_key_exists($propertyName, $scopeConfig)
-                ;
-
-                // if without associations
-                $isRemove = $isRemove || ($this->withoutAssociations && $isAssociationField);
-
-                if ($isRemove) {
-                    unset($configuration['properties'][$propertyName]);
-                    continue;
-                }
-
                 // Set default discriminator value for property
                 if (!isset($configuration['properties'][$propertyName]['discriminator'])) {
                     $configuration['properties'][$propertyName]['discriminator'] = null;
@@ -499,7 +479,40 @@ class DataSchema
                     $propertyClassMetadata = $this->getClassMetadata($propertyClass);
                 }
 
-                if ($isAssociationField) {
+                $isAssociationField = $propertyClassMetadata instanceof ClassMetadata ?
+                    $propertyClassMetadata->hasAssociation($propertyName) :
+                    false
+                ;
+
+                $isRemove =
+                    $scopeConfig !== null &&
+                    !in_array($propertyName, $identifierFieldNames) &&
+                    empty($propertyConfig['hidden']) &&
+                    !array_key_exists($propertyName, $scopeConfig)
+                ;
+
+                // if without associations
+                $isRemove = $isRemove || ($this->withoutAssociations && $isAssociationField);
+
+                if ($isRemove) {
+                    unset($configuration['properties'][$propertyName]);
+                    continue;
+                }
+
+                // set default description
+                if (empty($propertyConfig['description']) && $propertyClassMetadata && $propertyClassMetadata->hasField($propertyName)) {
+                    $fieldMapping = $propertyClassMetadata->getFieldMapping($propertyName);
+                    $description = isset($fieldMapping['options']['comment']) ? $fieldMapping['options']['comment'] : null;
+
+                    $configuration['properties'][$propertyName]['description'] = $description;
+                }
+
+                $isNestedField =
+                    isset($propertyConfig['properties']) ||
+                    isset($propertyConfig['schema'])
+                ;
+
+                if ($isNestedField) {
                     if ($propertyConfig['discriminator'] && isset($propertyConfig['join']) && $propertyConfig['join'] != 'none') {
                         throw new InvalidConfigurationException('The join type cannot be other than "none" if the discriminator is defined.');
                     }
@@ -507,7 +520,7 @@ class DataSchema
                     $class = isset($propertyConfig['class']) ?
                         $propertyConfig['class'] :
                         ($propertyClassMetadata instanceof ClassMetadata ?
-                            $propertyClassMetadata->getAssociationTargetClass($propertyName) :
+                            ($propertyClassMetadata->hasAssociation($propertyName) ? $propertyClassMetadata->getAssociationTargetClass($propertyName) : null) :
                             null
                         )
                     ;
@@ -515,8 +528,12 @@ class DataSchema
                     $preparedConfiguration = $this->prepareConfiguration($propertyConfig, $class, $scopeConfig[$propertyName]);
                     $configuration['properties'][$propertyName] = $preparedConfiguration;
 
-                    // type
-                    if ($preparedConfiguration && $propertyClassMetadata instanceof ClassMetadata) {
+                    // define type by association mapping
+                    if (
+                        $preparedConfiguration &&
+                        $propertyClassMetadata instanceof ClassMetadata &&
+                        $propertyClassMetadata->hasAssociation($propertyName)
+                    ) {
                         $associationMapping = $propertyClassMetadata->getAssociationMapping($propertyName);
                         $associationType = $associationMapping['type'];
 
