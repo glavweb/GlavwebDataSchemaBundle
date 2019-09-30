@@ -126,6 +126,12 @@ class ObjectHydrator
     protected function hydrateToOneAssociation($entity, $propertyName, $mapping, $value)
     {
         $reflectionClass = new \ReflectionClass($entity);
+
+        if (is_array($value)) {
+            $metaData = $this->entityManager->getClassMetadata($mapping['targetEntity']);
+            $value = array_intersect_key($value, array_flip($metaData->getIdentifierColumnNames()));
+        }
+
         $toOneAssociationObject = $this->fetchAssociationEntity($mapping['targetEntity'], $value);
 
         if (!is_null($toOneAssociationObject)) {
@@ -193,7 +199,7 @@ class ObjectHydrator
 
     /**
      * @param string $className
-     * @param int    $id
+     * @param mixed  $id
      * @return bool|\Doctrine\Common\Proxy\Proxy|null|object
      * @throws \Doctrine\ORM\ORMException
      * @throws \Doctrine\ORM\OptimisticLockException
