@@ -135,12 +135,12 @@ class TransformEvent
     }
 
     /**
+     * @param bool $hasAssociations
      * @return object
-     * @throws \Exception
      */
-    public function getEntity()
+    public function getEntity(bool $hasAssociations = true)
     {
-        return $this->objectHydrator->hydrate($this->getClassName(), $this->getData());
+        return $this->objectHydrator->hydrate($this->getClassName(), $this->getData(), $hasAssociations);
     }
 
     /**
