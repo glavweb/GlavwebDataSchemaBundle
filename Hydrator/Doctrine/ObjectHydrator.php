@@ -46,11 +46,12 @@ class ObjectHydrator
 
     /**
      * @param object|string $entity
-     * @param array  $data
+     * @param array $data
+     * @param bool $hasAssociations
      * @return object
      * @throws Exception
      */
-    public function hydrate($entity, array $data)
+    public function hydrate($entity, array $data, bool $hasAssociations = true)
     {
         if (is_string($entity) && class_exists($entity)) {
             $entity = new $entity;
@@ -60,7 +61,10 @@ class ObjectHydrator
         }
 
         $entity = $this->hydrateProperties($entity, $data);
-        $entity = $this->hydrateAssociations($entity, $data);
+
+        if ($hasAssociations) {
+            $entity = $this->hydrateAssociations($entity, $data);
+        }
 
         return $entity;
     }
