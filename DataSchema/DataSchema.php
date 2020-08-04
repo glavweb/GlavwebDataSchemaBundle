@@ -307,14 +307,21 @@ class DataSchema
                 }
 
                 if ($propertyConfig['type'] == 'entity') {
-                    $preparedData[$propertyName] = $this->getData(
-                        $value,
-                        $propertyConfig,
-                        $propertyScopeConfig,
-                        $class,
-                        $propertyName,
-                        null
-                    );
+                    if (!$this->isOnlyNullInArray($value)) {
+                        $preparedData[$propertyName] = $this->getData(
+                            $value,
+                            $propertyConfig,
+                            $propertyScopeConfig,
+                            $class,
+                            $propertyName,
+                            null
+                        );
+
+                    } else {
+                        if (!$config['filter_null_values']) {
+                            $preparedData[$propertyName] = null;
+                        }
+                    }
 
                     continue;
 
@@ -764,5 +771,20 @@ class DataSchema
         }
 
         return $configuration;
+    }
+
+    /**
+     * @param array $array
+     * @return bool
+     */
+    private function isOnlyNullInArray(array $array): bool
+    {
+        foreach ($array as $item) {
+            if ($item !== null) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
