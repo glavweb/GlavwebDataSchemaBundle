@@ -13,6 +13,7 @@ namespace Glavweb\DataSchemaBundle\DataSchema;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Exception;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry;
@@ -21,6 +22,10 @@ use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
 use Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\User\UserInterface;
+use function array_key_exists;
+use function array_keys;
+use function implode;
+use function in_array;
 
 /**
  * Class DataSchema
@@ -222,7 +227,7 @@ class DataSchema
                 }
 
                 $associationMapping = $metadata->getAssociationMapping($propertyName);
-                $databaseFields = self::getDatabaseFields($propertyConfig['properties']);
+                $databaseFields = self::getDatabaseFields($propertyConfig, $propertyScopeConfig);
                 $conditions     = $propertyConfig['conditions'];
 
                 switch ($associationMapping['type']) {
@@ -423,8 +428,10 @@ class DataSchema
         $configuration['class']                   = $class;
         $configuration['discriminatorColumnName'] = null;
         $configuration['discriminatorMap']        = [];
+        $isSuperClass                             = false;
 
         if ($classMetadata instanceof ClassMetadata && $classMetadata->subClasses) {
+            $isSuperClass = true;
             $configuration['discriminatorColumnName'] = $classMetadata->discriminatorColumn['name'];
             $configuration['discriminatorMap']        = $classMetadata->discriminatorMap;
             $configuration['tableName']               = $class;
@@ -449,6 +456,8 @@ class DataSchema
             $configuration = $this->injectDataSchema($configuration['schema'], $configuration);
         }
 
+        $selects = $configuration['query']['selects'] ?? [];
+
         if (isset($configuration['properties'])) {
             $properties = $configuration['properties'];
 
@@ -467,7 +476,49 @@ class DataSchema
                 }
             }
 
+            $validEntityFields = array_keys($selects);
+
             foreach ($properties as $propertyName => $propertyConfig) {
+
+                // validate superclass field
+                if ($isSuperClass) {
+                    $validEntityField    = false;
+                    $currentPropertyName = $propertyName;
+                    $depth = 0;
+                    $propertiesStack = [];
+
+                    do {
+                        $currentPropertyConfig = $properties[$currentPropertyName];
+                        $propertiesStack[] = $currentPropertyName;
+
+                        $isClassField = $classMetadata instanceof ClassMetadata
+                            && (
+                                $classMetadata->hasField($currentPropertyName)
+                                || $classMetadata->hasAssociation($currentPropertyName)
+                            );
+
+                        if (isset($currentPropertyConfig['discriminator'])
+                            || $isClassField
+                            || in_array($currentPropertyName, $validEntityFields)) {
+                            $validEntityFields[] = $currentPropertyName;
+                            $validEntityField = true;
+                            break;
+                        }
+
+                        if (++$depth > 10) {
+                            $propertiesStackString = implode(', ', $propertiesStack);
+                            throw new InvalidConfigurationException($configuration, "Maximum depth exceeded \"$propertiesStackString\"");
+                        }
+
+                    } while ($currentPropertyName = $currentPropertyConfig['source'] ?? null);
+
+                    if (!$validEntityField) {
+                        throw new InvalidConfigurationException($configuration,
+                            "Property \"$currentPropertyName\" should have \"discriminator\" definition"
+                        );
+                    }
+                }
+
                 // Set default discriminator value for property
                 if (!isset($configuration['properties'][$propertyName]['discriminator'])) {
                     $configuration['properties'][$propertyName]['discriminator'] = null;
@@ -521,7 +572,7 @@ class DataSchema
 
                 if ($isNestedField) {
                     if ($propertyConfig['discriminator'] && isset($propertyConfig['join']) && $propertyConfig['join'] != 'none') {
-                        throw new InvalidConfigurationException('The join type cannot be other than "none" if the discriminator is defined.');
+                        throw new InvalidConfigurationException($configuration, 'The join type cannot be other than "none" if the discriminator is defined.');
                     }
 
                     $class = isset($propertyConfig['class']) ?
@@ -626,13 +677,24 @@ class DataSchema
     }
 
     /**
-     * @param array $properties
+     * @param array $entityConfig
+     * @param array $scopeConfig
      * @return array
      */
-    public static function getDatabaseFields(array $properties)
+    public static function getDatabaseFields(array $entityConfig, array $scopeConfig = null)
     {
+        $properties = $entityConfig['properties'];
+        $entityClass = $entityConfig['class'];
+        $discriminatorMap = $entityConfig['discriminatorMap'] ?? null;
         $databaseFields = [];
         foreach ($properties as $propertyName => $propertyData) {
+            if (isset($propertyData['discriminator']) && $discriminatorMap && $discriminatorMap[$propertyData['discriminator']] !== $entityClass) {
+                continue;
+            }
+            if ($scopeConfig && !array_key_exists($propertyName, $scopeConfig)) {
+                continue;
+            }
+
             $field = null;
 
             $isValid = (isset($propertyData['from_db']) && $propertyData['from_db']);
