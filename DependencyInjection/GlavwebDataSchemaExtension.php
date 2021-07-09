@@ -11,13 +11,13 @@
 
 namespace Glavweb\DataSchemaBundle\DependencyInjection;
 
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;
-use Symfony\Component\HttpKernel\DependencyInjection\Extension;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader;
+use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 
 /**
- * Class GlavwebDatagridExtension
+ * Class GlavwebDataSchemaExtension
  *
  * This is the class that loads and manages your bundle configuration
  *
@@ -41,6 +41,7 @@ class GlavwebDataSchemaExtension extends Extension
 
         $container->setParameter('glavweb_data_schema.default_hydrator_mode', $config['default_hydrator_mode']);
         $container->setParameter('glavweb_data_schema.data_schema_dir', $config['data_schema']['dir']);
+        $container->setParameter('glavweb_data_schema.data_schema_max_nesting_depth', $config['data_schema']['max_nesting_depth']);
         $container->setParameter('glavweb_data_schema.scope_dir', $config['scope']['dir']);
     }
 }

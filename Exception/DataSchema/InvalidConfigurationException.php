@@ -25,17 +25,17 @@ class InvalidConfigurationException extends Exception
     /**
      * InvalidConfigurationException constructor.
      *
-     * @param array $configuration
-     * @param string $message
-     * @param int $code
+     * @param array|null     $configuration
+     * @param string         $message
+     * @param int            $code
      * @param Throwable|null $previous
      */
     public function __construct(array $configuration = null, $message = "", $code = 0, Throwable $previous = null)
     {
-        $className = $configuration['class'] ?? null;
+        $schemaName = $configuration['schema'] ?? null;
 
-        if ($className) {
-            $message = "$className: $message";
+        if ($schemaName) {
+            $message = "Schema \"$schemaName\": $message";
         }
 
         parent::__construct($message, $code, $previous);

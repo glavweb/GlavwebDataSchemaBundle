@@ -40,6 +40,7 @@ class Configuration implements ConfigurationInterface
                 ->arrayNode('data_schema')
                     ->children()
                         ->scalarNode('dir')->end()
+                        ->integerNode('max_nesting_depth')->defaultValue(10)->min(1)->end()
                     ->end()
                 ->end()
                 ->arrayNode('scope')

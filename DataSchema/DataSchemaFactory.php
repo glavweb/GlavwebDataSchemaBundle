@@ -11,52 +11,28 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema;
 
-use Doctrine\Bundle\DoctrineBundle\Registry;
+use Doctrine\ORM\Mapping\MappingException;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory;
-use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry;
+use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
 use Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator;
-use Glavweb\DataSchemaBundle\Loader\Yaml\DataSchemaYamlLoader;
-use Glavweb\DataSchemaBundle\Loader\Yaml\ScopeYamlLoader;
-use Symfony\Component\Config\FileLocator;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Glavweb\DataSchemaBundle\Service\DataSchemaFilter;
+use Glavweb\DataSchemaBundle\Service\DataSchemaService;
+use Glavweb\DataSchemaBundle\Service\DataSchemaValidator;
+use Glavweb\DataSchemaBundle\Util\Utils;
 
 /**
  * Class DataSchemaFactory
  *
- * @author Andrey Nilov <nilov@glavweb.ru>
+ * @author  Andrey Nilov <nilov@glavweb.ru>
  * @package Glavweb\DataSchemaBundle
  */
 class DataSchemaFactory
 {
-    /**
-     * @var Registry
-     */
-    private $doctrine;
-
-    /**
-     * @var DataTransformerRegistry
-     */
-    private $dataTransformerRegistry;
 
     /**
      * @var PersisterFactory
      */
     private $persisterFactory;
-
-    /**
-     * @var AuthorizationCheckerInterface
-     */
-    private $authorizationChecker;
-
-    /**
-     * @var string
-     */
-    private $dataSchemaDir;
-
-    /**
-     * @var string
-     */
-    private $scopeDir;
 
     /**
      * @var string
@@ -74,91 +50,119 @@ class DataSchemaFactory
     private $objectHydrator;
 
     /**
+     * @var int
+     */
+    private $nestingDepth;
+
+    /**
+     * @var DataSchemaService
+     */
+    private $dataSchemaService;
+
+    /**
+     * @var DataSchemaFilter
+     */
+    private $dataSchemaFilter;
+
+    /**
+     * @var DataSchemaValidator
+     */
+    private $dataSchemaValidator;
+
+    /**
      * DataSchema constructor.
      *
-     * @param Registry                      $doctrine
-     * @param DataTransformerRegistry       $dataTransformerRegistry
-     * @param PersisterFactory              $persisterFactory
-     * @param AuthorizationCheckerInterface $authorizationChecker
-     * @param Placeholder                   $placeholder
-     * @param ObjectHydrator                $objectHydrator
-     * @param string                        $dataSchemaDir
-     * @param string                        $scopeDir
-     * @param string                        $defaultHydratorMode
+     * @param DataSchemaService   $dataSchemaService
+     * @param DataSchemaFilter    $dataSchemaFilter
+     * @param DataSchemaValidator $dataSchemaValidator
+     * @param PersisterFactory    $persisterFactory
+     * @param Placeholder         $placeholder
+     * @param ObjectHydrator      $objectHydrator
+     * @param int                 $nestingDepth
+     * @param string|null         $defaultHydratorMode
      */
-    public function __construct(
-        Registry $doctrine,
-        DataTransformerRegistry $dataTransformerRegistry,
-        PersisterFactory $persisterFactory,
-        AuthorizationCheckerInterface $authorizationChecker,
-        Placeholder $placeholder,
-        ObjectHydrator $objectHydrator,
-        string $dataSchemaDir,
-        string $scopeDir,
-        $defaultHydratorMode = null
-    ){
-        $this->doctrine                = $doctrine;
-        $this->dataTransformerRegistry = $dataTransformerRegistry;
-        $this->persisterFactory        = $persisterFactory;
-        $this->authorizationChecker    = $authorizationChecker;
-        $this->placeholder             = $placeholder;
-        $this->objectHydrator          = $objectHydrator;
-        $this->dataSchemaDir           = $dataSchemaDir;
-        $this->scopeDir                = $scopeDir;
-        $this->defaultHydratorMode     = $defaultHydratorMode;
+    public function __construct(DataSchemaService $dataSchemaService,
+                                DataSchemaFilter $dataSchemaFilter,
+                                DataSchemaValidator $dataSchemaValidator,
+                                PersisterFactory $persisterFactory,
+                                Placeholder $placeholder,
+                                ObjectHydrator $objectHydrator,
+                                int $nestingDepth,
+                                string $defaultHydratorMode = null)
+    {
+        $this->dataSchemaService   = $dataSchemaService;
+        $this->dataSchemaFilter    = $dataSchemaFilter;
+        $this->dataSchemaValidator = $dataSchemaValidator;
+        $this->persisterFactory    = $persisterFactory;
+        $this->placeholder         = $placeholder;
+        $this->objectHydrator      = $objectHydrator;
+        $this->nestingDepth        = $nestingDepth;
+        $this->defaultHydratorMode = $defaultHydratorMode;
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @param string $scopeFile
-     * @param bool   $withoutInheritance
+     * @param string      $dataSchemaFile
+     * @param string|null $scopeFile
      * @return DataSchema
+     * @throws InvalidConfigurationException|MappingException
      */
-    public function createDataSchema($dataSchemaFile, $scopeFile = null, $withoutInheritance = false)
+    public function createDataSchema(string $dataSchemaFile, string $scopeFile = null): DataSchema
     {
-        $dataSchemaConfig = $this->getDataSchemaConfig($dataSchemaFile);
+        $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
+
+        $this->dataSchemaValidator->validate($dataSchemaConfig, $this->nestingDepth);
 
         $scopeConfig = null;
         if ($scopeFile) {
-            $scopeConfig = $this->getScopeConfig($scopeFile);
+            $scopeConfig = $this->dataSchemaService->loadScopeConfiguration($scopeFile);
         }
 
         return new DataSchema(
             $this,
-            $this->doctrine,
-            $this->dataTransformerRegistry,
+            $this->dataSchemaService,
+            $this->dataSchemaFilter,
             $this->persisterFactory,
-            $this->authorizationChecker,
             $this->placeholder,
             $this->objectHydrator,
             $dataSchemaConfig,
             $scopeConfig,
-            $withoutInheritance,
+            $this->nestingDepth,
             $this->defaultHydratorMode
         );
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @return array
+     * @param string   $dataSchemaFile
+     * @param array    $configuration
+     * @param null     $scopeConfig
+     * @param int|null $nestingDepth
+     * @return DataSchema
+     * @throws MappingException
+     * @throws InvalidConfigurationException
      */
-    public function getDataSchemaConfig($dataSchemaFile)
+    public function createNestedDataSchema(string $dataSchemaFile,
+                                           array $configuration,
+                                           $scopeConfig = null,
+                                           int $nestingDepth = null): DataSchema
     {
-        $dataSchemaLoader = new DataSchemaYamlLoader(new FileLocator($this->dataSchemaDir));
-        $dataSchemaLoader->load($dataSchemaFile);
+        $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 
-        return $dataSchemaLoader->getConfiguration();
+        $this->dataSchemaValidator->validate($dataSchemaConfig, $this->nestingDepth);
+
+        $mergedConfig = Utils::arrayDeepMerge($dataSchemaConfig, $configuration);
+
+        return new DataSchema(
+            $this,
+            $this->dataSchemaService,
+            $this->dataSchemaFilter,
+            $this->persisterFactory,
+            $this->placeholder,
+            $this->objectHydrator,
+            $mergedConfig,
+            $scopeConfig,
+            $nestingDepth,
+            $this->defaultHydratorMode
+        );
     }
 
-    /**
-     * @param string $scopeFile
-     * @return array
-     */
-    private function getScopeConfig($scopeFile)
-    {
-        $scopeLoader = new ScopeYamlLoader(new FileLocator($this->scopeDir));
-        $scopeLoader->load($scopeFile);
-
-        return $scopeLoader->getConfiguration();
-    }
 }

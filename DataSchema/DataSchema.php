@@ -11,49 +11,53 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema;
 
-use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Doctrine\ORM\Mapping\MappingException;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterInterface;
-use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry;
 use Glavweb\DataSchemaBundle\DataTransformer\TransformEvent;
 use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
+use Glavweb\DataSchemaBundle\Exception\DataTransformer\DataTransformerNotExists;
 use Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Glavweb\DataSchemaBundle\Service\DataSchemaFilter;
+use Glavweb\DataSchemaBundle\Service\DataSchemaService;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
  * Class DataSchema
  *
- * @author Andrey Nilov <nilov@glavweb.ru>
+ * @author  Andrey Nilov <nilov@glavweb.ru>
  * @package Glavweb\DataSchemaBundle
  */
 class DataSchema
 {
+    public const DEFAULTS = [
+        'schema'                  => null,
+        'class'                   => null,
+        'description'             => null,
+        'discriminator'           => null,
+        'filter_null_values'      => true,
+        'join'                    => 'none',
+        'type'                    => null,
+        'source'                  => null,
+        'decode'                  => null,
+        'hidden'                  => false,
+        'conditions'              => [],
+        'roles'                   => [],
+        'discriminatorColumnName' => null,
+        'discriminatorMap'        => [],
+        'tableName'               => null
+    ];
+
     /**
      * @var DataSchemaFactory
      */
     private $dataSchemaFactory;
 
     /**
-     * @var Registry
-     */
-    private $doctrine;
-
-    /**
-     * @var DataTransformerRegistry
-     */
-    private $dataTransformerRegistry;
-
-    /**
      * @var PersisterInterface
      */
     private $persister;
-
-    /**
-     * @var AuthorizationCheckerInterface
-     */
-    private $authorizationChecker;
 
     /**
      * @var Placeholder
@@ -63,22 +67,17 @@ class DataSchema
     /**
      * @var array
      */
-    private $configuration = [];
+    private $configuration;
 
     /**
      * @var array
      */
-    private $scopeConfig = [];
+    private $scopeConfig;
 
     /**
-     * @var ClassMetadata[]
+     * @var int
      */
-    private $classMetadataCache;
-
-    /**
-     * @var bool
-     */
-    private $withoutAssociations;
+    private $nestingDepth;
 
     /**
      * @var string|null
@@ -91,647 +90,64 @@ class DataSchema
     private $objectHydrator;
 
     /**
+     * @var DataSchemaService
+     */
+    private $dataSchemaService;
+
+    /**
+     * @var DataSchemaFilter
+     */
+    private $dataSchemaFilter;
+
+    /**
      * DataSchema constructor.
      *
-     * @param DataSchemaFactory             $dataSchemaFactory
-     * @param Registry                      $doctrine
-     * @param DataTransformerRegistry       $dataTransformerRegistry
-     * @param PersisterFactory              $persisterFactory
-     * @param AuthorizationCheckerInterface $authorizationChecker
-     * @param Placeholder                   $placeholder
-     * @param ObjectHydrator                $objectHydrator
-     * @param array                         $configuration
-     * @param array                         $scopeConfig
-     * @param bool                          $withoutAssociations
-     * @param string|null                   $defaultHydratorMode
+     * @param DataSchemaFactory $dataSchemaFactory
+     * @param DataSchemaService $dataSchemaService
+     * @param DataSchemaFilter  $dataSchemaFilter
+     * @param PersisterFactory  $persisterFactory
+     * @param Placeholder       $placeholder
+     * @param ObjectHydrator    $objectHydrator
+     * @param array             $configuration
+     * @param array|null        $scopeConfig
+     * @param int|null          $nestingDepth
+     * @param string|null       $defaultHydratorMode
+     * @throws InvalidConfigurationException
+     * @throws MappingException
      */
-    public function __construct(
-        DataSchemaFactory $dataSchemaFactory,
-        Registry $doctrine,
-        DataTransformerRegistry $dataTransformerRegistry,
-        PersisterFactory $persisterFactory,
-        AuthorizationCheckerInterface $authorizationChecker,
-        Placeholder $placeholder,
-        ObjectHydrator $objectHydrator,
-        array $configuration,
-        array $scopeConfig = null,
-        bool $withoutAssociations = false,
-        $defaultHydratorMode = null
-    ) {
-        $this->dataSchemaFactory       = $dataSchemaFactory;
-        $this->doctrine                = $doctrine;
-        $this->dataTransformerRegistry = $dataTransformerRegistry;
-        $this->authorizationChecker    = $authorizationChecker;
-        $this->placeholder             = $placeholder;
-        $this->objectHydrator          = $objectHydrator;
-        $this->withoutAssociations     = $withoutAssociations;
-        $this->defaultHydratorMode     = $defaultHydratorMode;
+    public function __construct(DataSchemaFactory $dataSchemaFactory,
+                                DataSchemaService $dataSchemaService,
+                                DataSchemaFilter $dataSchemaFilter,
+                                PersisterFactory $persisterFactory,
+                                Placeholder $placeholder,
+                                ObjectHydrator $objectHydrator,
+                                array $configuration,
+                                array $scopeConfig = null,
+                                int $nestingDepth = null,
+                                string $defaultHydratorMode = null)
+    {
+        $this->dataSchemaFactory   = $dataSchemaFactory;
+        $this->dataSchemaService   = $dataSchemaService;
+        $this->dataSchemaFilter    = $dataSchemaFilter;
+        $this->placeholder         = $placeholder;
+        $this->objectHydrator      = $objectHydrator;
+        $this->nestingDepth        = $nestingDepth;
+        $this->defaultHydratorMode = $defaultHydratorMode;
 
-        if (!isset($configuration['class'])) {
-            $configuration['class'] = null;
-        }
-        $class = $configuration['class'];
-
-        if (!isset($configuration['db_driver'])) {
-            throw new \RuntimeException('Option "db_driver" must be defined.');
-        }
-
-        $this->persister = $persisterFactory->createPersister($configuration['db_driver'], $this);
+        $this->persister   = $persisterFactory->createPersister($configuration['db_driver'], $this);
         $this->scopeConfig = $scopeConfig;
-        $this->configuration = $this->prepareConfiguration($configuration, $class, $scopeConfig);
-    }
 
-    /**
-     * @return array
-     */
-    public function getConfiguration()
-    {
-        return $this->configuration;
-    }
+        $this->dataSchemaService->startStopwatch('filter');
 
-    /**
-     * @param array  $data
-     * @param array  $config
-     * @param array  $scopeConfig
-     * @param string $parentClassName
-     * @param string $parentPropertyName
-     * @param array  $defaultData
-     * @return array
-     * @throws \Doctrine\ORM\Mapping\MappingException
-     */
-    public function getData(array $data, array $config = null, array $scopeConfig = null, $parentClassName = null, $parentPropertyName = null, $defaultData = [])
-    {
-        if ($config === null) {
-            $config = $this->configuration;
-        }
+        $configuration = $this->dataSchemaFilter->filter($configuration, $scopeConfig, $nestingDepth);
 
-        if ($scopeConfig === null) {
-            $scopeConfig = $this->scopeConfig;
-        }
+        $this->dataSchemaService->stopStopwatch('filter');
+        $this->dataSchemaService->startStopwatch('prepareConfiguration');
 
-        if (!$data) {
-            return $defaultData;
-        }
+        $this->configuration =
+            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth);
+        $this->dataSchemaService->stopStopwatch('prepareConfiguration');
 
-        if (!isset($config['properties'])) {
-            return $defaultData;
-        }
-
-        $preparedData = [];
-
-        $class = $config['class'];
-        if ($config['discriminatorMap'] && isset($data[$config['discriminatorColumnName']])) {
-            $discriminator = $data[$config['discriminatorColumnName']];
-            $class = $config['discriminatorMap'][$discriminator];
-        }
-
-        foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            if (isset($propertyConfig['hidden']) && $propertyConfig['hidden'] == true) {
-                continue;
-            }
-
-            $propertyScopeConfig = null;
-            if ($scopeConfig !== null) {
-                if (!array_key_exists($propertyName, $scopeConfig)) {
-                    continue;
-                }
-
-                $propertyScopeConfig = $scopeConfig[$propertyName] ?: [];
-            }
-
-            if (array_key_exists($propertyName, $data)) {
-                $value = $data[$propertyName];
-
-                if ($value === null) {
-                    if (in_array($propertyConfig['type'], ['array', 'json_array'])) {
-                        $value = [];
-
-                    } elseif ($config['filter_null_values']) {
-                        continue;
-                    }
-                }
-
-            } elseif (isset($propertyConfig['source']) && isset($data[$propertyConfig['source']])) {
-                $value = $data[$propertyConfig['source']];
-
-                // if property is nested object
-            } elseif (isset($propertyConfig['class']) && isset($propertyConfig['properties'])) {
-                $metadata = $this->getClassMetadata($class);
-                if (!$metadata->hasAssociation($propertyName)) {
-                    continue;
-                }
-
-                $associationMapping = $metadata->getAssociationMapping($propertyName);
-                $databaseFields = self::getDatabaseFields($propertyConfig, $propertyScopeConfig);
-                $conditions     = $propertyConfig['conditions'];
-
-                switch ($associationMapping['type']) {
-                    case ClassMetadata::MANY_TO_MANY:
-                        $orderByExpressions = isset($associationMapping['orderBy']) ? $associationMapping['orderBy'] : [];
-
-                        $modelData = $this->persister->getManyToManyData(
-                            $associationMapping,
-                            $data['id'],
-                            $databaseFields,
-                            $conditions,
-                            $orderByExpressions
-                        );
-
-                        $preparedData[$propertyName] = $this->getList(
-                            $modelData,
-                            $propertyConfig,
-                            $propertyScopeConfig,
-                            $class,
-                            $propertyName
-                        );
-
-                        break;
-
-                    case ClassMetadata::ONE_TO_MANY:
-                        $orderByExpressions = isset($associationMapping['orderBy']) ? $associationMapping['orderBy'] : [];
-
-                        $modelData = $this->persister->getOneToManyData(
-                            $associationMapping,
-                            $data['id'],
-                            $databaseFields,
-                            $conditions,
-                            $orderByExpressions
-                        );
-
-                        $preparedData[$propertyName] = $this->getList(
-                            $modelData,
-                            $propertyConfig,
-                            $propertyScopeConfig,
-                            $class,
-                            $propertyName
-                        );
-
-                        break;
-
-                    case ClassMetadata::MANY_TO_ONE:
-                        $modelData = $this->persister->getManyToOneData($associationMapping, $data['id'], $databaseFields, $conditions);
-                        $preparedData[$propertyName] = $this->getData(
-                            $modelData,
-                            $propertyConfig,
-                            $propertyScopeConfig,
-                            $class,
-                            $propertyName,
-                            null
-                        );
-
-                        break;
-
-                    case ClassMetadata::ONE_TO_ONE:
-                        $modelData = $this->persister->getOneToOneData($associationMapping, $data['id'], $databaseFields, $conditions);
-                        $preparedData[$propertyName] = $this->getData(
-                            $modelData,
-                            $propertyConfig,
-                            $propertyScopeConfig,
-                            $class,
-                            $propertyName,
-                            null
-                        );
-
-                        break;
-                }
-
-                continue;
-
-            } else {
-                $value = null;
-            }
-
-            if (is_array($value)) {
-                if (!array_key_exists('type', $propertyConfig)) {
-                    throw new \RuntimeException('Option "type" must be defined.');
-                }
-
-                if ($propertyConfig['type'] == 'entity') {
-                    if (!$this->isOnlyNullInArray($value)) {
-                        $preparedData[$propertyName] = $this->getData(
-                            $value,
-                            $propertyConfig,
-                            $propertyScopeConfig,
-                            $class,
-                            $propertyName,
-                            null
-                        );
-
-                    } else {
-                        if (!$config['filter_null_values']) {
-                            $preparedData[$propertyName] = null;
-                        }
-                    }
-
-                    continue;
-
-                } elseif ($propertyConfig['type'] == 'collection') {
-                    $preparedData[$propertyName] = $this->getList(
-                        $value,
-                        $propertyConfig,
-                        $propertyScopeConfig,
-                        $class,
-                        $propertyName
-                    );
-
-                    continue;
-                }
-            }
-
-            if (isset($propertyConfig['decode'])) {
-                $transformEvent = new TransformEvent(
-                    $class,
-                    $propertyName,
-                    $propertyConfig,
-                    $parentClassName,
-                    $parentPropertyName,
-                    $data,
-                    $this->objectHydrator,
-                    $this->dataSchemaFactory
-                );
-                $value = $this->decode($value, $propertyConfig['decode'], $transformEvent);
-
-                if (is_array($value) && $propertyScopeConfig) {
-                    $value = $this->getScopedData(
-                        $value,
-                        $propertyScopeConfig
-                    );
-                }
-            }
-
-            $preparedData[$propertyName] = $value;
-        }
-
-        return $preparedData;
-    }
-
-    /**
-     * @param array  $list
-     * @param array  $config
-     * @param array  $scopeConfig
-     * @param string $parentClassName
-     * @param string $parentPropertyName
-     * @return array
-     */
-    public function getList(array $list, array $config = null, array $scopeConfig = null, $parentClassName = null, $parentPropertyName = null)
-    {
-        if ($config === null) {
-            $config = $this->configuration;
-        }
-
-        if ($scopeConfig === null) {
-            $scopeConfig = $this->scopeConfig;
-        }
-
-        foreach ($list as $key => $value) {
-            $list[$key] = $this->getData(
-                $value,
-                $config,
-                $scopeConfig,
-                $parentClassName,
-                $parentPropertyName,
-                null
-            );
-        }
-
-        return $list;
-    }
-
-    /**
-     * @param array  $configuration
-     * @param string $class
-     * @param array  $scopeConfig
-     * @return array
-     * @throws InvalidConfigurationException
-     * @throws \Doctrine\ORM\Mapping\MappingException
-     */
-    protected function prepareConfiguration(array $configuration, $class = null, array $scopeConfig = null)
-    {
-        $classMetadata = $class ? $this->getClassMetadata($class) : null;
-
-        // roles
-        if (!isset($configuration['roles'])) {
-            $configuration['roles'] = [];
-        }
-
-        $isGranted = $this->isGranted($configuration['roles']);
-        if (!$isGranted) {
-            return [];
-        }
-
-        // class
-        $configuration['class']                   = $class;
-        $configuration['discriminatorColumnName'] = null;
-        $configuration['discriminatorMap']        = [];
-        $isSuperClass                             = false;
-
-        if ($classMetadata instanceof ClassMetadata && $classMetadata->subClasses) {
-            $isSuperClass = true;
-            $configuration['discriminatorColumnName'] = $classMetadata->discriminatorColumn['name'];
-            $configuration['discriminatorMap']        = $classMetadata->discriminatorMap;
-            $configuration['tableName']               = $class;
-        }
-
-        if ($classMetadata instanceof ClassMetadata) {
-            $configuration['tableName'] = $classMetadata->getTableName();
-        }
-
-        // condition
-        if (!isset($configuration['conditions'])) {
-            $configuration['conditions'] = [];
-        }
-
-        // filter_null_values
-        if (!isset($configuration['filter_null_values'])) {
-            $configuration['filter_null_values'] = true;
-        }
-
-        // inject properties
-        if (isset($configuration['schema']) && !$this->withoutAssociations) {
-            $configuration = $this->injectDataSchema($configuration['schema'], $configuration);
-        }
-
-        $selects = $configuration['query']['selects'] ?? [];
-
-        if (isset($configuration['properties'])) {
-            $properties = $configuration['properties'];
-
-            // Set ids
-            $identifierFieldNames = $classMetadata instanceof ClassMetadata ?
-                $classMetadata->getIdentifierFieldNames() :
-                []
-            ;
-
-            foreach ($properties as $propertyName => $propertyConfig) {
-                foreach ($identifierFieldNames as $idName) {
-                    if (!array_key_exists($idName, $properties)) {
-                        $properties[$idName] = ['hidden' => true];
-                        $configuration['properties'][$idName] = $properties[$idName];
-                    }
-                }
-            }
-
-            $validProperties = array_keys($selects);
-
-            foreach ($properties as $propertyName => $propertyConfig) {
-
-                // check superclass field requirements
-                if ($isSuperClass) {
-                    $this->validateSuperclassProperty($configuration, $propertyName, $classMetadata, $validProperties);
-                }
-
-                // Set default discriminator value for property
-                if (!isset($configuration['properties'][$propertyName]['discriminator'])) {
-                    $configuration['properties'][$propertyName]['discriminator'] = null;
-                }
-                $propertyConfig = $configuration['properties'][$propertyName]; // update $propertyConfig
-
-                // If has subclasses
-                $hasPropertyClassMetadata =
-                    $propertyConfig['discriminator'] &&
-                    isset($configuration['discriminatorMap'][$propertyConfig['discriminator']])
-                ;
-
-                $propertyClassMetadata = $classMetadata;
-                if ($hasPropertyClassMetadata) {
-                    $propertyClass = $configuration['discriminatorMap'][$propertyConfig['discriminator']];
-                    $propertyClassMetadata = $this->getClassMetadata($propertyClass);
-                }
-
-                $isAssociationField = $propertyClassMetadata instanceof ClassMetadata ?
-                    $propertyClassMetadata->hasAssociation($propertyName) :
-                    false
-                ;
-
-                $isRemove =
-                    $scopeConfig !== null &&
-                    !in_array($propertyName, $identifierFieldNames) &&
-                    empty($propertyConfig['hidden']) &&
-                    !array_key_exists($propertyName, $scopeConfig)
-                ;
-
-                // if without associations
-                $isRemove = $isRemove || ($this->withoutAssociations && $isAssociationField);
-
-                if ($isRemove) {
-                    unset($configuration['properties'][$propertyName]);
-                    continue;
-                }
-
-                // set default description
-                if (empty($propertyConfig['description']) && $propertyClassMetadata && $propertyClassMetadata->hasField($propertyName)) {
-                    $fieldMapping = $propertyClassMetadata->getFieldMapping($propertyName);
-                    $description = isset($fieldMapping['options']['comment']) ? $fieldMapping['options']['comment'] : null;
-
-                    $configuration['properties'][$propertyName]['description'] = $description;
-                }
-
-                $isNestedField =
-                    isset($propertyConfig['properties']) ||
-                    isset($propertyConfig['schema'])
-                ;
-
-                if ($isNestedField) {
-                    if ($propertyConfig['discriminator'] && isset($propertyConfig['join']) && $propertyConfig['join'] != 'none') {
-                        throw new InvalidConfigurationException($configuration, 'The join type cannot be other than "none" if the discriminator is defined.');
-                    }
-
-                    $class = isset($propertyConfig['class']) ?
-                        $propertyConfig['class'] :
-                        ($propertyClassMetadata instanceof ClassMetadata ?
-                            ($propertyClassMetadata->hasAssociation($propertyName) ? $propertyClassMetadata->getAssociationTargetClass($propertyName) : null) :
-                            null
-                        )
-                    ;
-
-                    $preparedConfiguration = $this->prepareConfiguration($propertyConfig, $class, $scopeConfig[$propertyName]);
-                    $configuration['properties'][$propertyName] = $preparedConfiguration;
-
-                    // define type by association mapping
-                    if (
-                        $preparedConfiguration &&
-                        $propertyClassMetadata instanceof ClassMetadata &&
-                        $propertyClassMetadata->hasAssociation($propertyName)
-                    ) {
-                        $associationMapping = $propertyClassMetadata->getAssociationMapping($propertyName);
-                        $associationType = $associationMapping['type'];
-
-                        $type = in_array($associationType, [ClassMetadata::ONE_TO_MANY, ClassMetadata::MANY_TO_MANY]) ? 'collection' : 'entity';
-                        $configuration['properties'][$propertyName]['type'] = $type;
-                    }
-
-                } else {
-                    if (!isset($propertyConfig['type']) && $propertyClassMetadata instanceof ClassMetadata) {
-                        $configuration['properties'][$propertyName]['type'] = $propertyClassMetadata->getTypeOfField($propertyName);
-                    }
-
-                    $configuration['properties'][$propertyName]['from_db'] =
-                        $propertyClassMetadata instanceof ClassMetadata &&
-                        (bool)$propertyClassMetadata->getTypeOfField($propertyName)
-                    ;
-
-                    $configuration['properties'][$propertyName]['field_db_name'] = $configuration['properties'][$propertyName]['from_db'] ?
-                        $propertyClassMetadata->getColumnName($propertyName) :
-                        null
-                    ;
-                }
-            }
-        }
-
-        return $configuration;
-    }
-
-    /**
-     * Checks what subclasses properties configurations have discriminator definition
-     *
-     * @param array $configuration
-     * @param string $propertyName
-     * @param ClassMetadata|null $classMetadata
-     * @param array $validProperties
-     * @throws InvalidConfigurationException
-     */
-    protected function validateSuperclassProperty(array $configuration, string $propertyName, ?ClassMetadata $classMetadata, array $validProperties): void
-    {
-        if (!isset($configuration['properties'])) {
-            throw new \InvalidArgumentException('Configuration should have properties property');
-        }
-
-        $properties          = $configuration['properties'];
-        $valid               = false;
-        $depth               = 0;
-        $propertiesStack     = [];
-
-        do {
-            $propertyConfig = $properties[$propertyName];
-            $propertiesStack[]     = $propertyName;
-
-            if (in_array($propertyName, $validProperties)) {
-                $valid = true;
-                break;
-            }
-
-            $isClassField = $classMetadata instanceof ClassMetadata
-                && (
-                    $classMetadata->hasField($propertyName)
-                    || $classMetadata->hasAssociation($propertyName)
-                );
-
-            if (isset($propertyConfig['discriminator']) || $isClassField) {
-                $validProperties[]   = $propertyName;
-                $valid = true;
-                break;
-            }
-
-            if (++$depth > 10) {
-                $propertiesStackString = implode(' > ', $propertiesStack);
-                throw new InvalidConfigurationException($configuration, "Maximum depth exceeded \"$propertiesStackString\"");
-            }
-
-        } while ($propertyName = $propertyConfig['source'] ?? null);
-
-        if (!$valid) {
-            throw new InvalidConfigurationException($configuration,
-                "Property \"$propertyName\" should have \"discriminator\" definition"
-            );
-        }
-    }
-
-    protected function getScopedData(array $data, array $scope): array
-    {
-        $scopedData = [];
-
-        foreach ($data as $key => $value) {
-            if (array_key_exists($key, $scope)) {
-                if (is_array($value) && $scope[$key]) {
-                    $scopedData[$key] = $this->getScopedData($value, $scope[$key]);
-
-                } else {
-                    $scopedData[$key] = $value;
-                }
-            }
-        }
-
-        return $scopedData;
-    }
-
-    /**
-     * @param string $class
-     * @return ClassMetadata
-     */
-    protected function getClassMetadata($class)
-    {
-        if (!isset($this->classMetadataCache[$class])) {
-            $classMetadata = $this->doctrine->getManager()->getClassMetadata($class);
-
-            $this->classMetadataCache[$class] = $classMetadata;
-        }
-
-        return $this->classMetadataCache[$class];
-    }
-
-    /**
-     * @param mixed          $value
-     * @param string         $decodeString
-     * @param TransformEvent $transformEvent
-     * @return mixed
-     */
-    protected function decode($value, $decodeString, TransformEvent $transformEvent)
-    {
-        $dataTransformerNames = explode('|', $decodeString);
-        $dataTransformerNames = array_map('trim', $dataTransformerNames);
-
-        foreach ($dataTransformerNames as $dataTransformerName) {
-            $hasDataTransformer = $this->dataTransformerRegistry->has($dataTransformerName);
-
-            if ($hasDataTransformer) {
-                $transformer = $this->dataTransformerRegistry->get($dataTransformerName);
-                $value = $transformer->transform($value, $transformEvent);
-            }
-        }
-
-        return $value;
-    }
-
-    /**
-     * @param array $entityConfig
-     * @param array $scopeConfig
-     * @return array
-     */
-    public static function getDatabaseFields(array $entityConfig, array $scopeConfig = null)
-    {
-        $properties = $entityConfig['properties'];
-        $entityClass = $entityConfig['class'];
-        $discriminatorMap = $entityConfig['discriminatorMap'] ?? null;
-        $databaseFields = [];
-        foreach ($properties as $propertyName => $propertyData) {
-            if (isset($propertyData['discriminator']) && $discriminatorMap && $discriminatorMap[$propertyData['discriminator']] !== $entityClass) {
-                continue;
-            }
-            if ($scopeConfig && !array_key_exists($propertyName, $scopeConfig)) {
-                continue;
-            }
-
-            while (isset($propertyData['source']) && $propertyData['source'] !== $propertyName) {
-                $propertyName = $propertyData['source'];
-                $propertyData = $properties[$propertyName];
-            }
-
-            $isValid = (isset($propertyData['from_db']) && $propertyData['from_db']);
-
-            if ($isValid && !in_array($propertyName, $databaseFields)) {
-                $databaseFields[] = $propertyName;
-            }
-        }
-
-        return $databaseFields;
-    }
-
-    /**
-     * @return array
-     */
-    public function getQuerySelects(): array
-    {
-        return isset($this->configuration['query']['selects']) ? $this->configuration['query']['selects'] : [];
     }
 
     /**
@@ -751,16 +167,502 @@ class DataSchema
     {
         $propertyConfiguration = $this->getPropertyConfiguration($propertyName);
 
-        return $propertyConfiguration !== null &&
-            isset($propertyConfiguration['from_db']) && $propertyConfiguration['from_db']
-            ;
+        return $propertyConfiguration !== null && isset($propertyConfiguration['from_db'])
+            && $propertyConfiguration['from_db'];
+    }
+
+    /**
+     * @param string             $condition
+     * @param string             $alias
+     * @param UserInterface|null $user
+     * @return string
+     */
+    public function conditionPlaceholder(string $condition, string $alias, UserInterface $user = null): string
+    {
+        return $this->placeholder->condition($condition, $alias, $user);
+    }
+
+    /**
+     * @param array       $configuration
+     * @param string|null $class
+     * @param array|null  $scopeConfig
+     * @param int         $nestingDepth
+     * @return array
+     * @throws InvalidConfigurationException
+     * @throws MappingException
+     */
+    protected function prepareConfiguration(array $configuration,
+                                            ?string $class,
+                                            array $scopeConfig = null,
+                                            int $nestingDepth = 0): array
+    {
+        $class = $class ?? $configuration['class'] ?? null;
+
+        $configuration          = array_replace(self::DEFAULTS, $configuration);
+        $configuration['class'] = $class;
+
+        if (!$this->dataSchemaFilter->isGranted($configuration['roles'])) {
+            return [];
+        }
+
+        // class
+        $classMetadata        = $class ? $this->dataSchemaService->getClassMetadata($class) : null;
+        $identifierFieldNames = [];
+        $discriminatorMap     = null;
+
+        if ($classMetadata instanceof ClassMetadata) {
+            if ($classMetadata->subClasses) {
+                $configuration['discriminatorColumnName'] = $classMetadata->discriminatorColumn['name'];
+                $configuration['discriminatorMap']        = $classMetadata->discriminatorMap;
+                $discriminatorMap                         = $configuration['discriminatorMap'];
+            }
+
+            $configuration['tableName'] = $classMetadata->getTableName();
+            $identifierFieldNames       = $classMetadata->getIdentifierFieldNames();
+        }
+        $configProperties = $configuration['properties'] ?? [];
+        $properties       = [];
+
+        foreach ($identifierFieldNames as $idName) {
+            if (!array_key_exists($idName, $configProperties)) {
+                $configProperties[$idName]            = array_merge(self::DEFAULTS, ['hidden' => true]);
+                $configuration['properties'][$idName] = $configProperties[$idName];
+            }
+        }
+
+        foreach ($configProperties as $propertyName => $propertyConfig) {
+            $propertyScopeConfig = $scopeConfig[$propertyName] ?? null;
+            $schema              = $propertyConfig['schema'] ?? null;
+            $isNested            = $schema || !empty($propertyConfig['properties']);
+
+            if ($schema) {
+                $propertyConfig = $this->getNestedDataSchemaConfiguration(
+                    $schema,
+                    $propertyConfig,
+                    $nestingDepth - 1,
+                    $propertyScopeConfig
+                );
+            }
+
+            $discriminator = $propertyConfig['discriminator'] ?? null;
+            $subClass      = $discriminatorMap && $discriminator ? $discriminatorMap[$discriminator] ?? null : null;
+
+            $propertyOwnerClassMetadata =
+                $subClass ? $this->dataSchemaService->getClassMetadata($subClass) : $classMetadata;
+
+            // set default description
+            if (empty($propertyConfig['description']) && $propertyOwnerClassMetadata instanceof ClassMetadata
+                && $propertyOwnerClassMetadata->hasField($propertyName)) {
+
+                $fieldMapping = $propertyOwnerClassMetadata->getFieldMapping($propertyName);
+                $description  = $fieldMapping['options']['comment'] ?? null;
+
+                $propertyConfig['description'] = $description;
+            }
+
+            if ($isNested) {
+                $propertyClass = $propertyConfig['class'] ?? null;
+
+                if (!$propertyClass && $propertyOwnerClassMetadata instanceof ClassMetadata
+                    && $propertyOwnerClassMetadata->hasAssociation($propertyName)) {
+
+                    $propertyClass = $propertyOwnerClassMetadata->getAssociationTargetClass($propertyName);
+                }
+
+                $propertyConfig = $this->prepareConfiguration(
+                    $propertyConfig,
+                    $propertyClass,
+                    $propertyScopeConfig,
+                    $nestingDepth - 1
+                );
+
+                if ($propertyConfig && $propertyOwnerClassMetadata instanceof ClassMetadata
+                    && $propertyOwnerClassMetadata->hasAssociation($propertyName)) {
+
+                    $isCollection = $propertyOwnerClassMetadata->isCollectionValuedAssociation($propertyName);
+
+                    $propertyConfig['type'] = $isCollection ? 'collection' : 'entity';
+                }
+
+            } else if ($propertyOwnerClassMetadata instanceof ClassMetadata) {
+                $propertyConfig['type'] =
+                    $propertyConfig['type'] ?? $propertyOwnerClassMetadata->getTypeOfField($propertyName);
+
+                $propertyConfig['from_db'] = $propertyOwnerClassMetadata->hasField($propertyName);
+
+                $propertyConfig['field_db_name'] =
+                    $propertyConfig['from_db'] ? $propertyOwnerClassMetadata->getColumnName($propertyName) : null;
+            }
+
+            $properties[$propertyName] = $propertyConfig;
+        }
+
+        $configuration['properties'] = $properties;
+
+        return $configuration;
+    }
+
+    /**
+     * @param mixed          $value
+     * @param string         $decodeString
+     * @param TransformEvent $transformEvent
+     * @return mixed
+     * @throws DataTransformerNotExists
+     */
+    protected function decode($value, string $decodeString, TransformEvent $transformEvent)
+    {
+        $dataTransformerNames = $this->dataSchemaService->parseDecodeString($decodeString);
+
+        foreach ($dataTransformerNames as $dataTransformerName) {
+            $transformer = $this->dataSchemaService->getDataTransformer($dataTransformerName);
+            $value       = $transformer->transform($value, $transformEvent);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array      $data
+     * @param array      $config
+     * @param array|null $scopeConfig
+     * @return array
+     * @throws MappingException|InvalidConfigurationException
+     */
+    private function fetchMissingPropertiesRecursive(array $data, array $config, array $scopeConfig = null): array
+    {
+        $class    = $this->getDataClassName($config, $data);
+        $metadata = $this->dataSchemaService->getClassMetadata($class);
+
+        $result = $data + [];
+
+        foreach ($config['properties'] as $propertyName => $propertyConfig) {
+            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+
+            if ($propertyConfig['class'] && $propertyConfig['properties']) {
+
+                if (!$metadata->hasAssociation($propertyName)) {
+                    continue;
+                }
+
+                $value = null;
+
+                if (array_key_exists($propertyName, $data)) {
+                    $value = $data[$propertyName];
+
+                    if (is_array($value)) {
+                        if ($this->isIterablePropertyType($propertyConfig['type'])) {
+                            $value = array_map(
+                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                                    return $this->fetchMissingPropertiesRecursive(
+                                        $itemData,
+                                        $propertyConfig,
+                                        $propertyScopeConfig
+                                    );
+                                },
+                                $value
+                            );
+                        } else {
+                            $value =
+                                $this->fetchMissingPropertiesRecursive($value, $propertyConfig, $propertyScopeConfig);
+                        }
+                    }
+                } else {
+                    $associationMapping = $metadata->getAssociationMapping($propertyName);
+                    $databaseFields     = $this->dataSchemaService->getDatabaseFields(
+                        $propertyConfig,
+                        $propertyScopeConfig
+                    );
+                    $conditions         = $propertyConfig['conditions'];
+                    $orderByExpressions = $associationMapping['orderBy'] ?? [];
+
+                    switch ($associationMapping['type']) {
+                        case ClassMetadata::MANY_TO_MANY:
+
+                            $modelData = $this->persister->getManyToManyData(
+                                $associationMapping,
+                                $data['id'],
+                                $databaseFields,
+                                $conditions,
+                                $orderByExpressions
+                            );
+
+                            $value = array_map(
+                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                                    return $this->fetchMissingPropertiesRecursive(
+                                        $itemData,
+                                        $propertyConfig,
+                                        $propertyScopeConfig
+                                    );
+                                },
+                                $modelData
+                            );
+
+                            break;
+
+                        case ClassMetadata::ONE_TO_MANY:
+                            $modelData = $this->persister->getOneToManyData(
+                                $associationMapping,
+                                $data['id'],
+                                $databaseFields,
+                                $conditions,
+                                $orderByExpressions
+                            );
+
+                            $value = array_map(
+                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                                    return $this->fetchMissingPropertiesRecursive(
+                                        $itemData,
+                                        $propertyConfig,
+                                        $propertyScopeConfig
+                                    );
+                                },
+                                $modelData
+                            );
+
+                            break;
+
+                        case ClassMetadata::MANY_TO_ONE:
+                            $modelData = $this->persister->getManyToOneData(
+                                $associationMapping,
+                                $data['id'],
+                                $databaseFields,
+                                $conditions
+                            );
+
+                            $value = $this->fetchMissingPropertiesRecursive(
+                                $modelData,
+                                $propertyConfig,
+                                $propertyScopeConfig
+                            );
+
+                            break;
+
+                        case ClassMetadata::ONE_TO_ONE:
+                            $modelData = $this->persister->getOneToOneData(
+                                $associationMapping,
+                                $data['id'],
+                                $databaseFields,
+                                $conditions
+                            );
+
+                            $value = $this->fetchMissingPropertiesRecursive(
+                                $modelData,
+                                $propertyConfig,
+                                $propertyScopeConfig
+                            );
+
+                            break;
+                    }
+                }
+
+                $result[$propertyName] = $value;
+
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * @param array       $data
+     * @param array       $config
+     * @param array|null  $scopeConfig
+     * @param string|null $parentClassName
+     * @param string|null $parentPropertyName
+     * @return array
+     * @throws DataTransformerNotExists
+     */
+    private function modifyPropertiesRecursive(array $data,
+                                               array $config,
+                                               array $scopeConfig = null,
+                                               string $parentClassName = null,
+                                               string $parentPropertyName = null): array
+    {
+        $class = $this->getDataClassName($config, $data);
+
+        $result = [];
+
+        foreach ($config['properties'] as $propertyName => $propertyConfig) {
+            $value               = null;
+            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+
+            if (array_key_exists($propertyName, $data)) {
+                $value = $data[$propertyName];
+
+            } elseif ($propertyConfig['source'] && isset($data[$propertyConfig['source']])) {
+                $value = $data[$propertyConfig['source']];
+
+            } else {
+                $value = null;
+            }
+
+            if (is_array($value)) {
+                if (!array_key_exists('type', $propertyConfig)) {
+                    throw new \RuntimeException('Property "type" must be defined.');
+                }
+
+                if ($propertyConfig['type'] === 'entity') {
+                    if (!$this->isOnlyNullInArray($value)) {
+                        $value = $this->modifyPropertiesRecursive(
+                            $value,
+                            $propertyConfig,
+                            $propertyScopeConfig,
+                            $class,
+                            $propertyName
+                        );
+
+                    } else if (!$config['filter_null_values']) {
+                        $value = null;
+                    }
+
+                } elseif ($propertyConfig['type'] === 'collection') {
+                    $value = array_map(
+                        function ($itemData) use (
+                            $propertyConfig,
+                            $propertyScopeConfig,
+                            $class,
+                            $propertyName
+                        ) {
+                            return $this->modifyPropertiesRecursive(
+                                $itemData,
+                                $propertyConfig,
+                                $propertyScopeConfig,
+                                $class,
+                                $propertyName
+                            );
+                        },
+                        $value
+                    );
+
+                }
+            }
+
+            if ($propertyConfig['decode']) {
+                $transformEvent = new TransformEvent(
+                    $class,
+                    $propertyName,
+                    $propertyConfig,
+                    $parentClassName,
+                    $parentPropertyName,
+                    $data,
+                    $this->objectHydrator,
+                    $this->dataSchemaFactory
+                );
+
+                $value = $this->decode($value, $propertyConfig['decode'], $transformEvent);
+
+                if (is_array($value) && $propertyScopeConfig) {
+                    $value = $this->getScopedData(
+                        $value,
+                        $propertyScopeConfig
+                    );
+                }
+            }
+
+            if ($value === null) {
+                if ($this->isIterablePropertyType($propertyConfig['type'])) {
+                    $value = [];
+
+                } elseif ($config['filter_null_values']) {
+                    continue;
+                }
+            }
+
+            $result[$propertyName] = $value;
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return array
+     */
+    public function getConfiguration(): array
+    {
+        return $this->configuration;
+    }
+
+    /**
+     * @param array      $data
+     * @param array|null $config
+     * @param array|null $scopeConfig
+     * @param array|null $defaultData
+     * @return array
+     * @throws InvalidConfigurationException
+     * @throws MappingException|DataTransformerNotExists
+     */
+    public function getData(array $data,
+                            array $config = null,
+                            array $scopeConfig = null,
+                            ?array $defaultData = []): array
+    {
+        $this->dataSchemaService->startStopwatch('getData');
+
+        $config      = $config ?? $this->configuration;
+        $scopeConfig = $scopeConfig ?? $this->scopeConfig;
+
+        if ($config !== $this->configuration || $scopeConfig !== $this->scopeConfig) {
+            $config = $this->dataSchemaFilter->filter($config, $scopeConfig, $this->nestingDepth);
+        }
+
+        if (!$data) {
+            return $defaultData;
+        }
+
+        if (!$config['properties']) {
+            return $defaultData;
+        }
+
+        $fetchedData = $this->fetchMissingPropertiesRecursive($data, $config, $scopeConfig);
+
+        $modifiedData = $this->modifyPropertiesRecursive($fetchedData, $config, $scopeConfig);
+
+        $this->dataSchemaService->stopStopwatch('getData');
+
+        return $modifiedData;
+    }
+
+    /**
+     * @param array      $list
+     * @param array|null $config
+     * @param array|null $scopeConfig
+     * @return array
+     * @throws MappingException|InvalidConfigurationException
+     * @throws DataTransformerNotExists
+     */
+    public function getList(array $list, array $config = null, array $scopeConfig = null): array
+    {
+        $this->dataSchemaService->startStopwatch('getList');
+
+        foreach ($list as $key => $value) {
+            $list[$key] = $this->getData(
+                $value,
+                $config,
+                $scopeConfig,
+                null
+            );
+
+            $this->dataSchemaService->lapStopwatch('getList');
+        }
+
+        $this->dataSchemaService->stopStopwatch('getList');
+
+        return $list;
+    }
+
+    /**
+     * @return array
+     */
+    public function getQuerySelects(): array
+    {
+        return $this->configuration['query']['selects'] ?? [];
     }
 
     /**
      * @param string $propertyName
      * @return array|null
      */
-    public function getPropertyConfiguration(string $propertyName):? array
+    public function getPropertyConfiguration(string $propertyName): ?array
     {
         $propertyConfiguration = $this->configuration;
 
@@ -781,70 +683,64 @@ class DataSchema
      */
     public function getHydrationMode()
     {
-        return isset($this->configuration['hydration_mode']) ? $this->configuration['hydration_mode'] : $this->defaultHydratorMode;
+        return $this->configuration['hydration_mode'] ?? $this->defaultHydratorMode;
     }
 
     /**
-     * @param array $roles
-     * @return bool
-     */
-    protected function isGranted(array $roles)
-    {
-        if (empty($roles)) {
-            return true;
-        }
-
-        foreach ($roles as $role) {
-            if ($this->authorizationChecker->isGranted($role)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * @param string $condition
-     * @param string $alias
-     * @param UserInterface $user
-     * @return string
-     */
-    public function conditionPlaceholder($condition, $alias, UserInterface $user = null)
-    {
-        return $this->placeholder->condition($condition, $alias, $user);
-    }
-
-    /**
-     * @param string $dataSchemaFile
-     * @param array  $configuration
+     * @param array $data
+     * @param array $scope
      * @return array
      */
-    private function injectDataSchema($dataSchemaFile, array $configuration)
+    protected function getScopedData(array $data, array $scope): array
     {
-        $dataSchema = $this->dataSchemaFactory->createDataSchema($dataSchemaFile, null, true);
-        $injectedConfiguration = $dataSchema->getConfiguration();
+        $scopedData = [];
 
-        // inject properties (save source property order)
-        if (isset($injectedConfiguration['properties'])) {
-            $injectedProperties = $injectedConfiguration['properties'];
+        foreach ($data as $key => $value) {
+            if (array_key_exists($key, $scope)) {
+                if (is_array($value) && $scope[$key]) {
+                    $scopedData[$key] = $this->getScopedData($value, $scope[$key]);
 
-            $properties = isset($configuration['properties']) ? $configuration['properties'] : [];
-            foreach ($properties as $propertyName => $propertyConfig) {
-                $injectedProperties[$propertyName] = $propertyConfig;
-            }
-
-            $configuration['properties'] = $injectedProperties;
-            unset($injectedConfiguration['properties']);
-        }
-
-        // inject rest configuration parameters
-        foreach ($injectedConfiguration as $key => $value) {
-            if (!array_key_exists($key, $configuration)) {
-                $configuration[$key] = $value;
+                } else {
+                    $scopedData[$key] = $value;
+                }
             }
         }
 
-        return $configuration;
+        return $scopedData;
+    }
+
+    /**
+     * @param string|null $type
+     * @return bool
+     */
+    private function isIterablePropertyType(?string $type): bool
+    {
+        return in_array($type, ['array', 'json_array', 'collection']);
+    }
+
+    /**
+     * @param string     $dataSchemaFile
+     * @param array      $configuration
+     * @param int        $nestingDepth
+     * @param array|null $scopeConfig
+     * @return array
+     * @throws InvalidConfigurationException
+     * @throws MappingException
+     */
+    private function getNestedDataSchemaConfiguration(string $dataSchemaFile,
+                                                      array $configuration,
+                                                      int $nestingDepth,
+                                                      array $scopeConfig = null): array
+    {
+
+        $dataSchema = $this->dataSchemaFactory->createNestedDataSchema(
+            $dataSchemaFile,
+            $configuration,
+            $scopeConfig,
+            $nestingDepth
+        );
+
+        return $dataSchema->getConfiguration();
     }
 
     /**
@@ -860,5 +756,22 @@ class DataSchema
         }
 
         return true;
+    }
+
+    /**
+     * @param array $config
+     * @param array $data
+     * @return string
+     */
+    private function getDataClassName(array $config, array $data): string
+    {
+        $class = $config['class'];
+
+        if ($config['discriminatorMap'] && isset($data[$config['discriminatorColumnName']])) {
+            $discriminator = $data[$config['discriminatorColumnName']];
+            $class         = $config['discriminatorMap'][$discriminator];
+        }
+
+        return $class;
     }
 }

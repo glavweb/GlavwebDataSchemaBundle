@@ -108,7 +108,7 @@ class DataSchemaYamlLoader extends FileLoader
     private function loadConfiguration(array $content)
     {
         foreach ($content as $namespace => $values) {
-            if (in_array($namespace, array('imports'))) {
+            if ($namespace === 'imports') {
                 continue;
             }
 

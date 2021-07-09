@@ -14,13 +14,14 @@ namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Query;
+use Doctrine\ORM\Query\Expr\Join;
 use Glavweb\DataSchemaBundle\DataSchema\DataSchema;
 use Glavweb\DataSchemaBundle\Exception\Persister\InvalidQueryException;
 
 /**
  * Class EntityPersister
  *
- * @author Andrey Nilov <nilov@glavweb.ru>
+ * @author  Andrey Nilov <nilov@glavweb.ru>
  * @package Glavweb\DataSchemaBundle
  */
 class EntityPersister implements PersisterInterface
@@ -61,10 +62,11 @@ class EntityPersister implements PersisterInterface
      * @param array $conditions
      * @param array $orderByExpressions
      * @return array
+     * @throws InvalidQueryException
      */
     public function getManyToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
     {
-        $query = $this->getQuery($associationMapping, $id, $databaseFields, $conditions, $orderByExpressions);
+        $query = $this->getQuery($associationMapping, $id, false, $databaseFields, $conditions, $orderByExpressions);
 
         return $query->getArrayResult();
     }
@@ -76,10 +78,11 @@ class EntityPersister implements PersisterInterface
      * @param array $conditions
      * @param array $orderByExpressions
      * @return array
+     * @throws InvalidQueryException
      */
     public function getOneToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
     {
-        $query = $this->getQuery($associationMapping, $id, $databaseFields, $conditions, $orderByExpressions);
+        $query = $this->getQuery($associationMapping, $id, false, $databaseFields, $conditions, $orderByExpressions);
 
         return $query->getArrayResult();
     }
@@ -90,10 +93,12 @@ class EntityPersister implements PersisterInterface
      * @param array $databaseFields
      * @param array $conditions
      * @return array
+     * @throws InvalidQueryException
+     * @throws \Doctrine\ORM\NonUniqueResultException
      */
     public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
     {
-        $query = $this->getQuery($associationMapping, $id, $databaseFields, $conditions);
+        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
 
         return (array)$query->getOneOrNullResult();
     }
@@ -104,10 +109,12 @@ class EntityPersister implements PersisterInterface
      * @param array $databaseFields
      * @param array $conditions
      * @return array
+     * @throws InvalidQueryException
+     * @throws \Doctrine\ORM\NonUniqueResultException
      */
     public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
     {
-        $query = $this->getQuery($associationMapping, $id, $databaseFields, $conditions);
+        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
 
         return (array)$query->getOneOrNullResult();
     }
@@ -115,36 +122,56 @@ class EntityPersister implements PersisterInterface
     /**
      * @param array $associationMapping
      * @param mixed $id
+     * @param bool  $single
      * @param array $databaseFields
      * @param array $conditions
      * @param array $orderByExpressions
      * @return Query
      * @throws InvalidQueryException
      */
-    protected function getQuery(array $associationMapping, $id, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
+    protected function getQuery(array $associationMapping, $id, bool $single, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
     {
         /** @var EntityManager $em */
         $em = $this->doctrine->getManager();
 
         $targetClass = $associationMapping['targetEntity'];
         $joinField   = $associationMapping['isOwningSide'] ? $associationMapping['inversedBy'] : $associationMapping['mappedBy'];
-        $targetAlias = uniqid('t');
-        $sourceAlias = uniqid('s');
+        $targetAlias = uniqid('t', false);
+        $sourceAlias = uniqid('s', false);
+        $qb          = $em->createQueryBuilder();
 
         if (!$joinField) {
-            throw new InvalidQueryException(sprintf('The join filed part cannot be defined. May be you need configure association mapping for classes "%s" and "%s".',
-                $associationMapping['sourceEntity'],
-                $targetClass
-            ));
-        }
+            $sourceClass         = $associationMapping['sourceEntity'];
+            $sourceField         = $associationMapping['fieldName'];
+            $associationOperator = $single ? '=' : 'MEMBER OF';
 
-        $qb = $em->createQueryBuilder()
-            ->select(sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
-            ->from($targetClass, $targetAlias)
-            ->join(sprintf('%s.%s', $targetAlias, $joinField), $sourceAlias)
-            ->where($sourceAlias . '.id = :sourceId')
-            ->setParameter('sourceId', $id)
-        ;
+            if (!$sourceField) {
+                throw new InvalidQueryException(
+                    sprintf(
+                        'The join filed part cannot be defined. May be you need configure association mapping for classes "%s" and "%s".',
+                        $associationMapping['sourceEntity'],
+                        $targetClass
+                    )
+                );
+            }
+
+            $qb
+                ->select(sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
+                ->from($targetClass, $targetAlias)
+                ->join($sourceClass, $sourceAlias, Join::WITH,
+                    sprintf('%s %s %s.%s', $targetAlias, $associationOperator, $sourceAlias, $sourceField)
+                )
+                ->where($sourceAlias . '.id = :sourceId')
+                ->setParameter('sourceId', $id);
+
+        } else {
+            $qb
+                ->select(sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
+                ->from($targetClass, $targetAlias)
+                ->join(sprintf('%s.%s', $targetAlias, $joinField), $sourceAlias)
+                ->where($sourceAlias . '.id = :sourceId')
+                ->setParameter('sourceId', $id);
+        }
 
         foreach ($conditions as $condition) {
             $preparedCondition = $this->dataSchema->conditionPlaceholder($condition, $targetAlias);

@@ -1,16 +1,39 @@
 services:
-    glavweb_data_schema.data_schema_factory:
-        class:  Glavweb\DataSchemaBundle\DataSchema\DataSchemaFactory
+    glavweb_data_schema.service:
+        class: Glavweb\DataSchemaBundle\Service\DataSchemaService
         public: true
         arguments:
             - "@doctrine"
             - "@glavweb_data_schema.data_transformer_registry"
-            - "@glavweb_data_schema.persister_factory"
-            - "@security.authorization_checker"
-            - "@glavweb_data_schema.placeholder"
-            - "@glavweb_data_schema.orm_object_hydrator"
             - "%glavweb_data_schema.data_schema_dir%"
             - "%glavweb_data_schema.scope_dir%"
+            - "%glavweb_data_schema.data_schema_max_nesting_depth%"
+            - "@?debug.stopwatch"
+
+    glavweb_data_schema.filter:
+        class: Glavweb\DataSchemaBundle\Service\DataSchemaFilter
+        public: true
+        arguments:
+            - "@glavweb_data_schema.service"
+            - "@security.authorization_checker"
+
+    glavweb_data_schema.validator:
+        class: Glavweb\DataSchemaBundle\Service\DataSchemaValidator
+        public: true
+        arguments:
+            - "@glavweb_data_schema.service"
+
+    glavweb_data_schema.data_schema_factory:
+        class:  Glavweb\DataSchemaBundle\DataSchema\DataSchemaFactory
+        public: true
+        arguments:
+            - "@glavweb_data_schema.service"
+            - "@glavweb_data_schema.filter"
+            - "@glavweb_data_schema.validator"
+            - "@glavweb_data_schema.persister_factory"
+            - "@glavweb_data_schema.placeholder"
+            - "@glavweb_data_schema.orm_object_hydrator"
+            - "%glavweb_data_schema.data_schema_max_nesting_depth%"
             - "%glavweb_data_schema.default_hydrator_mode%"
 
     glavweb_data_schema.placeholder:
@@ -36,6 +59,11 @@ services:
         class: Glavweb\DataSchemaBundle\Command\GenerateDataSchemaCommand
         tags:
             - { name: console.command, command: "glavweb:data-schema" }
+
+    glavweb_data_schema.validate_data_schema_command:
+        class: Glavweb\DataSchemaBundle\Command\ValidateDataSchemaCommand
+        tags:
+            - { name: console.command, command: "glavweb:data-schema:validate" }
 
     glavweb_data_schema.generate_scope_command:
         class: Glavweb\DataSchemaBundle\Command\GenerateScopeCommand
