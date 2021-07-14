@@ -82,7 +82,7 @@ class DataSchemaValidator
                 foreach ($properties as $propertyName => $propertyConfig) {
                     $source              = $propertyConfig['source'] ?? null;
                     $decode              = $propertyConfig['decode'] ?? null;
-                    $isNestedProperty    = $propertyConfig['schema'] || $propertyConfig['properties'];
+                    $isNestedProperty    = $this->dataSchemaService->isNestedProperty($propertyConfig);
                     $isVirtualProperty   = (bool)$source;
                     $hasDecodingFunction = (bool)$decode;
 
@@ -142,6 +142,7 @@ class DataSchemaValidator
     {
         $class         = $classMetadata->getName();
         $discriminator = $config['discriminator'] ?? null;
+        $join          = $config['join'] ?? null;
 
         if (!$classMetadata->hasField($name) && !$classMetadata->hasAssociation($name)) {
             $discriminatorMap = $classMetadata->discriminatorMap;
@@ -171,6 +172,12 @@ class DataSchemaValidator
                             $name, "Class \"$subClass\" and all its siblings doesn't have this property"
                         );
                     }
+
+                    if ($join && $join !== 'none') {
+                        throw new InvalidConfigurationPropertyException(
+                            $name, "Subclass association can't be joined. You should use the \"none\" join"
+                        );
+                    }
                 } else {
                     $discriminators = array_keys($discriminatorMap);
                     throw new InvalidConfigurationPropertyException(
@@ -192,13 +199,10 @@ class DataSchemaValidator
                     $name, "Class \"$class\" and all its subclasses doesn't have this property"
                 );
             }
-        } else {
-//            @TODO fix in glavweb-datagrid-bundle
-//            if ($discriminator) {
-//                throw new InvalidConfigurationPropertyException(
-//                    $name, "Shouldn't have \"discriminator\" property defined"
-//                );
-//            }
+        } else if ($discriminator) {
+            throw new InvalidConfigurationPropertyException(
+                $name, "Shouldn't have \"discriminator\" property defined"
+            );
         }
 
     }

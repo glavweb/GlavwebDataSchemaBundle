@@ -13,11 +13,14 @@ namespace Glavweb\DataSchemaBundle\DataSchema;
 
 use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\MappingException;
+use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\NoResultException;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\TransformEvent;
 use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
 use Glavweb\DataSchemaBundle\Exception\DataTransformer\DataTransformerNotExists;
+use Glavweb\DataSchemaBundle\Exception\Persister\InvalidQueryException;
 use Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator;
 use Glavweb\DataSchemaBundle\Service\DataSchemaFilter;
 use Glavweb\DataSchemaBundle\Service\DataSchemaService;
@@ -233,7 +236,7 @@ class DataSchema
         foreach ($configProperties as $propertyName => $propertyConfig) {
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? null;
             $schema              = $propertyConfig['schema'] ?? null;
-            $isNested            = $schema || !empty($propertyConfig['properties']);
+            $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
 
             if ($schema) {
                 $propertyConfig = $this->getNestedDataSchemaConfiguration(
@@ -326,137 +329,74 @@ class DataSchema
      * @param array      $config
      * @param array|null $scopeConfig
      * @return array
-     * @throws MappingException|InvalidConfigurationException
+     * @throws InvalidConfigurationException
+     * @throws MappingException
+     * @throws NoResultException
+     * @throws NonUniqueResultException
+     * @throws InvalidQueryException
      */
     private function fetchMissingPropertiesRecursive(array $data, array $config, array $scopeConfig = null): array
     {
+        $id       = $data['id'] ?? null;
         $class    = $this->getDataClassName($config, $data);
         $metadata = $this->dataSchemaService->getClassMetadata($class);
 
         $result = $data + [];
+        $fields = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+            $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $isFromDb            = $propertyConfig['from_db'] ?? false;
 
-            if ($propertyConfig['class'] && $propertyConfig['properties']) {
+            $value = null;
 
-                if (!$metadata->hasAssociation($propertyName)) {
+            if (array_key_exists($propertyName, $data)) {
+                $value = $data[$propertyName];
+
+                if ($isNested && is_array($value)) {
+                    if ($this->isIterablePropertyType($propertyConfig['type'])) {
+                        $value = array_map(
+                            function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                                return $this->fetchMissingPropertiesRecursive(
+                                    $itemData,
+                                    $propertyConfig,
+                                    $propertyScopeConfig
+                                );
+                            },
+                            $value
+                        );
+                    } else {
+                        $value = $this->fetchMissingPropertiesRecursive($value, $propertyConfig, $propertyScopeConfig);
+                    }
+                }
+            } else if ($isNested) {
+                if (!$id || !$metadata->hasAssociation($propertyName)) {
                     continue;
                 }
 
-                $value = null;
+                $value = $this->fetchMissingAssociationRecursive(
+                    $metadata,
+                    $propertyName,
+                    $propertyConfig,
+                    $propertyScopeConfig,
+                    $id
+                );
+            } else if ($isFromDb && $metadata->hasField($propertyName)) {
+                $fields[] = $propertyName;
+                continue;
+            } else {
+                continue;
+            }
 
-                if (array_key_exists($propertyName, $data)) {
-                    $value = $data[$propertyName];
+            $result[$propertyName] = $value;
+        }
 
-                    if (is_array($value)) {
-                        if ($this->isIterablePropertyType($propertyConfig['type'])) {
-                            $value = array_map(
-                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                                    return $this->fetchMissingPropertiesRecursive(
-                                        $itemData,
-                                        $propertyConfig,
-                                        $propertyScopeConfig
-                                    );
-                                },
-                                $value
-                            );
-                        } else {
-                            $value =
-                                $this->fetchMissingPropertiesRecursive($value, $propertyConfig, $propertyScopeConfig);
-                        }
-                    }
-                } else {
-                    $associationMapping = $metadata->getAssociationMapping($propertyName);
-                    $databaseFields     = $this->dataSchemaService->getDatabaseFields(
-                        $propertyConfig,
-                        $propertyScopeConfig
-                    );
-                    $conditions         = $propertyConfig['conditions'];
-                    $orderByExpressions = $associationMapping['orderBy'] ?? [];
+        if ($fields && $id) {
+            $fieldsData = $this->persister->getPropertiesData($class, $fields, $id);
 
-                    switch ($associationMapping['type']) {
-                        case ClassMetadata::MANY_TO_MANY:
-
-                            $modelData = $this->persister->getManyToManyData(
-                                $associationMapping,
-                                $data['id'],
-                                $databaseFields,
-                                $conditions,
-                                $orderByExpressions
-                            );
-
-                            $value = array_map(
-                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                                    return $this->fetchMissingPropertiesRecursive(
-                                        $itemData,
-                                        $propertyConfig,
-                                        $propertyScopeConfig
-                                    );
-                                },
-                                $modelData
-                            );
-
-                            break;
-
-                        case ClassMetadata::ONE_TO_MANY:
-                            $modelData = $this->persister->getOneToManyData(
-                                $associationMapping,
-                                $data['id'],
-                                $databaseFields,
-                                $conditions,
-                                $orderByExpressions
-                            );
-
-                            $value = array_map(
-                                function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                                    return $this->fetchMissingPropertiesRecursive(
-                                        $itemData,
-                                        $propertyConfig,
-                                        $propertyScopeConfig
-                                    );
-                                },
-                                $modelData
-                            );
-
-                            break;
-
-                        case ClassMetadata::MANY_TO_ONE:
-                            $modelData = $this->persister->getManyToOneData(
-                                $associationMapping,
-                                $data['id'],
-                                $databaseFields,
-                                $conditions
-                            );
-
-                            $value = $this->fetchMissingPropertiesRecursive(
-                                $modelData,
-                                $propertyConfig,
-                                $propertyScopeConfig
-                            );
-
-                            break;
-
-                        case ClassMetadata::ONE_TO_ONE:
-                            $modelData = $this->persister->getOneToOneData(
-                                $associationMapping,
-                                $data['id'],
-                                $databaseFields,
-                                $conditions
-                            );
-
-                            $value = $this->fetchMissingPropertiesRecursive(
-                                $modelData,
-                                $propertyConfig,
-                                $propertyScopeConfig
-                            );
-
-                            break;
-                    }
-                }
-
-                $result[$propertyName] = $value;
-
+            foreach ($fieldsData as $fieldName => $fieldValue) {
+                $result[$fieldName] = $fieldValue;
             }
         }
 
@@ -485,6 +425,7 @@ class DataSchema
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
             $value               = null;
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+            $isHidden            = $propertyConfig['hidden'] ?? false;
 
             if (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
@@ -559,6 +500,10 @@ class DataSchema
                 }
             }
 
+            if ($isHidden) {
+                continue;
+            }
+
             if ($value === null) {
                 if ($this->isIterablePropertyType($propertyConfig['type'])) {
                     $value = [];
@@ -575,6 +520,106 @@ class DataSchema
     }
 
     /**
+     * @param ClassMetadata $metadata
+     * @param               $propertyName
+     * @param               $propertyConfig
+     * @param               $propertyScopeConfig
+     * @param               $id
+     * @return array|array[]
+     * @throws InvalidConfigurationException
+     * @throws MappingException
+     * @throws NonUniqueResultException
+     * @throws InvalidQueryException
+     * @throws NoResultException
+     */
+    private function fetchMissingAssociationRecursive(ClassMetadata $metadata,
+                                                      $propertyName,
+                                                      $propertyConfig,
+                                                      $propertyScopeConfig,
+                                                      $id): array
+    {
+        $associationMapping = $metadata->getAssociationMapping($propertyName);
+        $databaseFields     = $this->dataSchemaService->getDatabaseFields(
+            $propertyConfig,
+            $propertyScopeConfig
+        );
+        $conditions         = $propertyConfig['conditions'];
+        $orderByExpressions = $associationMapping['orderBy'] ?? [];
+
+        switch ($associationMapping['type']) {
+            case ClassMetadata::MANY_TO_MANY:
+                $modelData = $this->persister->getManyToManyData(
+                    $associationMapping,
+                    $id,
+                    $databaseFields,
+                    $conditions,
+                    $orderByExpressions
+                );
+
+                return array_map(
+                    function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                        return $this->fetchMissingPropertiesRecursive(
+                            $itemData,
+                            $propertyConfig,
+                            $propertyScopeConfig
+                        );
+                    },
+                    $modelData
+                );
+
+            case ClassMetadata::ONE_TO_MANY:
+                $modelData = $this->persister->getOneToManyData(
+                    $associationMapping,
+                    $id,
+                    $databaseFields,
+                    $conditions,
+                    $orderByExpressions
+                );
+
+                return array_map(
+                    function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
+                        return $this->fetchMissingPropertiesRecursive(
+                            $itemData,
+                            $propertyConfig,
+                            $propertyScopeConfig
+                        );
+                    },
+                    $modelData
+                );
+
+            case ClassMetadata::MANY_TO_ONE:
+                $modelData = $this->persister->getManyToOneData(
+                    $associationMapping,
+                    $id,
+                    $databaseFields,
+                    $conditions
+                );
+
+                return $this->fetchMissingPropertiesRecursive(
+                    $modelData,
+                    $propertyConfig,
+                    $propertyScopeConfig
+                );
+
+            case ClassMetadata::ONE_TO_ONE:
+                $modelData = $this->persister->getOneToOneData(
+                    $associationMapping,
+                    $id,
+                    $databaseFields,
+                    $conditions
+                );
+
+                return $this->fetchMissingPropertiesRecursive(
+                    $modelData,
+                    $propertyConfig,
+                    $propertyScopeConfig
+                );
+        }
+
+        return [];
+    }
+
+    /**
      * @return array
      */
     public function getConfiguration(): array
@@ -588,8 +633,12 @@ class DataSchema
      * @param array|null $scopeConfig
      * @param array|null $defaultData
      * @return array
+     * @throws DataTransformerNotExists
      * @throws InvalidConfigurationException
-     * @throws MappingException|DataTransformerNotExists
+     * @throws InvalidQueryException
+     * @throws MappingException
+     * @throws NoResultException
+     * @throws NonUniqueResultException
      */
     public function getData(array $data,
                             array $config = null,
@@ -627,8 +676,12 @@ class DataSchema
      * @param array|null $config
      * @param array|null $scopeConfig
      * @return array
-     * @throws MappingException|InvalidConfigurationException
      * @throws DataTransformerNotExists
+     * @throws InvalidConfigurationException
+     * @throws InvalidQueryException
+     * @throws MappingException
+     * @throws NoResultException
+     * @throws NonUniqueResultException
      */
     public function getList(array $list, array $config = null, array $scopeConfig = null): array
     {

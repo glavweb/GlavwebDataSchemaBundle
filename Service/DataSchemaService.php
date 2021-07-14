@@ -266,18 +266,18 @@ class DataSchemaService
         $discriminatorMap = $entityConfig['discriminatorMap'] ?? null;
         $databaseFields   = [];
 
-        foreach ($properties as $propertyName => $propertyData) {
-            if (isset($propertyData['discriminator']) && $discriminatorMap
-                && $discriminatorMap[$propertyData['discriminator']] !== $entityClass) {
+        foreach ($properties as $propertyName => $propertyConfig) {
+            if (isset($propertyConfig['discriminator']) && $discriminatorMap
+                && $discriminatorMap[$propertyConfig['discriminator']] !== $entityClass) {
                 continue;
             }
-            if ($scopeConfig && !array_key_exists($propertyName, $scopeConfig)) {
+            if (!$propertyConfig['hidden'] && $scopeConfig && !array_key_exists($propertyName, $scopeConfig)) {
                 continue;
             }
 
             $propertySourcesStack = $this->getPropertySourcesStack($entityConfig, $propertyName);
 
-            $isVirtualProperty   = !empty($propertySourcesStack);
+            $isVirtualProperty = !empty($propertySourcesStack);
 
             if ($isVirtualProperty) {
                 foreach ($propertySourcesStack as [$sourcePropertyName, $sourcePropertyData]) {
@@ -288,7 +288,7 @@ class DataSchemaService
                     }
                 }
             } else {
-                $isValid = $propertyData['from_db'] ?? false;
+                $isValid = $propertyConfig['from_db'] ?? false;
 
                 if ($isValid && !in_array($propertyName, $databaseFields, true)) {
                     $databaseFields[] = $propertyName;
@@ -297,6 +297,19 @@ class DataSchemaService
         }
 
         return $databaseFields;
+    }
+
+    /**
+     * @param array $propertyConfiguraion
+     * @return bool
+     */
+    public function isNestedProperty(array $propertyConfiguraion): bool
+    {
+        $schema     = $propertyConfiguraion['schema'] ?? null;
+        $class      = $propertyConfiguraion['class'] ?? null;
+        $properties = $propertyConfiguraion['properties'] ?? [];
+
+        return $schema || $class || $properties;
     }
 
     /**

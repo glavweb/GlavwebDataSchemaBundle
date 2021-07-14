@@ -54,4 +54,12 @@ interface PersisterInterface
      * @return array
      */
     public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
+
+    /**
+     * @param string $class
+     * @param array  $properties
+     * @param int    $id
+     * @return array
+     */
+    public function getPropertiesData(string $class, array $properties, int $id): array;
 }

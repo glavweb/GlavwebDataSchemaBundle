@@ -13,6 +13,8 @@ namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\Query;
 use Doctrine\ORM\Query\Expr\Join;
 use Glavweb\DataSchemaBundle\DataSchema\DataSchema;
@@ -94,7 +96,7 @@ class EntityPersister implements PersisterInterface
      * @param array $conditions
      * @return array
      * @throws InvalidQueryException
-     * @throws \Doctrine\ORM\NonUniqueResultException
+     * @throws NonUniqueResultException
      */
     public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
     {
@@ -110,7 +112,7 @@ class EntityPersister implements PersisterInterface
      * @param array $conditions
      * @return array
      * @throws InvalidQueryException
-     * @throws \Doctrine\ORM\NonUniqueResultException
+     * @throws NonUniqueResultException
      */
     public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
     {
@@ -185,5 +187,35 @@ class EntityPersister implements PersisterInterface
         }
 
         return $qb->getQuery()->setHydrationMode($this->hydrationMode);
+    }
+
+    /**
+     * @param string $class
+     * @param array  $properties
+     * @param int    $id
+     * @return array
+     * @throws NonUniqueResultException
+     * @throws NoResultException
+     */
+    public function getPropertiesData(string $class, array $properties, int $id): array
+    {
+        /** @var EntityManager $em */
+        $em = $this->doctrine->getManager();
+        $qb = $em->createQueryBuilder();
+        $alias = 't';
+
+        if (!in_array('id', $properties, true)) {
+            $properties[] = 'id';
+        }
+
+        $qb
+            ->select(sprintf('PARTIAL %s.{%s}', $alias, implode(',', $properties)))
+            ->from($class, $alias)
+            ->where($alias . '.id = :id')
+            ->setParameter('id', $id);
+
+        $query = $qb->getQuery();
+
+        return (array)$query->getSingleResult($this->hydrationMode);
     }
 }
