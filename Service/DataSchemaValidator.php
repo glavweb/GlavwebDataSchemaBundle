@@ -59,10 +59,10 @@ class DataSchemaValidator
                     );
                 }
 
-                if (!(($class && $properties) || $schema)) {
+                if (!(($properties) || $schema)) {
                     throw new InvalidConfigurationException(
                         $config,
-                        "Nested property should have \"class\" and \"properties\" or \"schema\" property to be defined"
+                        "Nested property should have \"properties\" or \"schema\" property to be defined"
                     );
                 }
             } else if (!$class || !$properties) {
