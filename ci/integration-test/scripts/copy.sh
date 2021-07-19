@@ -4,4 +4,4 @@ set -x
 cd ..
 
 rm -rf build/*
-cp -r app/* build
+cp -r app/. build

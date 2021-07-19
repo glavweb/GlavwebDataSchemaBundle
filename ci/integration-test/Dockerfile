@@ -1,5 +1,7 @@
 FROM php:7.2.5-cli
 
+ARG BUNDLE_VERSION
+
 RUN apt-get update && \
     apt-get install -y \
       unzip \
@@ -20,6 +22,6 @@ WORKDIR /usr/src/app
 
 RUN composer require --dev phpunit/phpunit symfony/test-pack
 
-COPY environment/config/glavweb_data_schema.yaml config/packages
+COPY environment .
 
-RUN composer config repositories.glavweb '{"type": "path", "url": "../bundle", "options": {"versions": { "glavweb/data-schema-bundle": "1" }}}'
+RUN composer config repositories.glavweb "{\"type\": \"path\", \"url\": \"../bundle\", \"options\": {\"versions\": { \"glavweb/data-schema-bundle\": \"$BUNDLE_VERSION\" }}}"

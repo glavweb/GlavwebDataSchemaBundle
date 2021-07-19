@@ -1,5 +1,6 @@
 #!/bin/bash
 set -x
+set -e
 
 composer require glavweb/data-schema-bundle
 
