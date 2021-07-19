@@ -58,7 +58,7 @@ class DataSchemaFilter
                 $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
                 $isIdentifier        = in_array($propertyName, $identifierFieldNames, true);
                 $isHidden            = $propertyConfig['hidden'] ?? false;
-                $isInScope           = array_key_exists($propertyName, $scopeConfig) || !$scopeConfig;
+                $isInScope           = !$scopeConfig || array_key_exists($propertyName, $scopeConfig);
 
                 if ((!$isInScope && !$isHidden && !$isIdentifier) || (!$isInScope && $isNested && $nestingDepth <= 0)) {
                     continue;

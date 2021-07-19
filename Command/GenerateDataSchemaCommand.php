@@ -11,11 +11,13 @@
 
 namespace Glavweb\DataSchemaBundle\Command;
 
+use Doctrine\Persistence\ManagerRegistry;
 use Glavweb\DataSchemaBundle\Generator\DataSchemaGenerator;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\HttpKernel\KernelInterface;
 
 /**
  * Class GenerateDataSchemaCommand
@@ -23,8 +25,32 @@ use Symfony\Component\Console\Output\OutputInterface;
  * @author Andrey Nilov <nilov@glavweb.ru>
  * @package Glavweb\DataSchemaBundle
  */
-class GenerateDataSchemaCommand extends ContainerAwareCommand
+class GenerateDataSchemaCommand extends Command
 {
+    /**
+     * @var ManagerRegistry
+     */
+    private $doctrine;
+
+    /**
+     * @var KernelInterface
+     */
+    private $kernel;
+
+    /**
+     * @var string
+     */
+    private $dataSchemaDir;
+
+    public function __construct(ManagerRegistry $doctrine, KernelInterface $kernel, string $dataSchemaDir)
+    {
+        $this->doctrine = $doctrine;
+        $this->kernel = $kernel;
+        $this->dataSchemaDir = $dataSchemaDir;
+
+        parent::__construct();
+    }
+
     /**
      * Configure
      */
@@ -42,16 +68,14 @@ class GenerateDataSchemaCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $container         = $this->getContainer();
         $modelClass        = $this->validateClass($input->getArgument('model'));
-        $doctrine          = $this->getContainer()->get('doctrine');
         $skeletonDirectory = __DIR__ . '/../Resources/skeleton';
 
         try {
             $dataSchemaGenerator = new DataSchemaGenerator(
-                $container->get('kernel'),
-                $doctrine,
-                $container->getParameter('glavweb_data_schema.data_schema_dir'),
+                $this->kernel,
+                $this->doctrine,
+                $this->dataSchemaDir,
                 $skeletonDirectory
             );
 

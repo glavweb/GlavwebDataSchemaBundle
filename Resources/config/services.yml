@@ -40,7 +40,7 @@ services:
         class:  Glavweb\DataSchemaBundle\DataSchema\Placeholder
         arguments:
             - "@annotation_reader"
-            - "@security.token_storage"
+            - "@security.helper"
             - "@twig.extension.security"
 
     glavweb_data_schema.persister_factory:
@@ -57,15 +57,18 @@ services:
     # Commands
     glavweb_data_schema.generate_data_schema_command:
         class: Glavweb\DataSchemaBundle\Command\GenerateDataSchemaCommand
+        arguments: ["@doctrine", "@kernel", "%glavweb_data_schema.data_schema_dir%"]
         tags:
             - { name: console.command, command: "glavweb:data-schema" }
 
     glavweb_data_schema.validate_data_schema_command:
         class: Glavweb\DataSchemaBundle\Command\ValidateDataSchemaCommand
+        arguments: [ "@glavweb_data_schema.validator", "%glavweb_data_schema.data_schema_dir%", "%glavweb_data_schema.data_schema_max_nesting_depth%" ]
         tags:
             - { name: console.command, command: "glavweb:data-schema:validate" }
 
     glavweb_data_schema.generate_scope_command:
         class: Glavweb\DataSchemaBundle\Command\GenerateScopeCommand
+        arguments: [ "@doctrine", "@kernel", "%glavweb_data_schema.scope_dir%" ]
         tags:
             - { name: console.command, command: "glavweb:scope" }

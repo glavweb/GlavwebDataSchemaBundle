@@ -3,14 +3,41 @@
 namespace Glavweb\DataSchemaBundle\Command;
 
 use Glavweb\DataSchemaBundle\Service\DataSchemaValidator;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Finder\Finder;
 
-class ValidateDataSchemaCommand extends ContainerAwareCommand
+class ValidateDataSchemaCommand extends Command
 {
+    /**
+     * @var DataSchemaValidator
+     */
+    private $dataSchemaValidator;
+
+    /**
+     * @var string
+     */
+    private $dataSchemaDir;
+
+    /**
+     * @var int
+     */
+    private $nestingDepth;
+
+    /**
+     * ValidateDataSchemaCommand constructor.
+     */
+    public function __construct(DataSchemaValidator $dataSchemaValidator, string $dataSchemaDir, int $nestingDepth)
+    {
+        $this->dataSchemaValidator = $dataSchemaValidator;
+        $this->dataSchemaDir       = $dataSchemaDir;
+        $this->nestingDepth        = $nestingDepth;
+
+        parent::__construct();
+    }
+
     /**
      * Configure
      */
@@ -30,10 +57,9 @@ class ValidateDataSchemaCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        /** @var DataSchemaValidator $dataSchemaValidator */
-        $dataSchemaValidator = $this->getContainer()->get('glavweb_data_schema.validator');
-        $rootDir             = $this->getContainer()->getParameter('glavweb_data_schema.data_schema_dir');
-        $nestingDepth        = $this->getContainer()->getParameter('glavweb_data_schema.data_schema_max_nesting_depth');
+        $dataSchemaValidator = $this->dataSchemaValidator;
+        $rootDir             = $this->dataSchemaDir;
+        $nestingDepth        = $this->nestingDepth;
 
         $successful = false;
         $path       = $input->getArgument('path');

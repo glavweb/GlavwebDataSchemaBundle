@@ -27,9 +27,9 @@ class DataSchemaConfiguration implements ConfigurationInterface
      */
     public function getConfigTreeBuilder()
     {
-        $treeBuilder = new TreeBuilder();
+        $treeBuilder = new TreeBuilder('schema');
 
-        $rootNode = $treeBuilder->root('schema');
+        $rootNode = $treeBuilder->getRootNode();
 
         $rootNode
             ->children()
@@ -69,9 +69,9 @@ class DataSchemaConfiguration implements ConfigurationInterface
 
     public function addPropertiesNode($depth)
     {
-        $treeBuilder = new TreeBuilder();
+        $treeBuilder = new TreeBuilder('properties');
 
-        $rootNode = $treeBuilder->root('properties');
+        $rootNode = $treeBuilder->getRootNode();
 
         if ($depth === 0) {
             return $rootNode;

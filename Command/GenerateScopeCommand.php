@@ -11,11 +11,13 @@
 
 namespace Glavweb\DataSchemaBundle\Command;
 
+use Doctrine\Persistence\ManagerRegistry;
 use Glavweb\DataSchemaBundle\Generator\ScopeGenerator;
-use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
+use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\HttpKernel\KernelInterface;
 
 /**
  * Class GenerateScopeCommand
@@ -23,8 +25,32 @@ use Symfony\Component\Console\Output\OutputInterface;
  * @author Andrey Nilov <nilov@glavweb.ru>
  * @package Glavweb\DataSchemaBundle
  */
-class GenerateScopeCommand extends ContainerAwareCommand
+class GenerateScopeCommand extends Command
 {
+    /**
+     * @var ManagerRegistry
+     */
+    private $doctrine;
+
+    /**
+     * @var KernelInterface
+     */
+    private $kernel;
+
+    /**
+     * @var string
+     */
+    private $scopeDir;
+
+    public function __construct(ManagerRegistry $doctrine, KernelInterface $kernel, string $scopeDir)
+    {
+        $this->doctrine = $doctrine;
+        $this->kernel = $kernel;
+        $this->scopeDir = $scopeDir;
+
+        parent::__construct();
+    }
+
     /**
      * Configure
      */
@@ -42,16 +68,14 @@ class GenerateScopeCommand extends ContainerAwareCommand
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $container         = $this->getContainer();
         $modelClass        = $this->validateClass($input->getArgument('model'));
-        $doctrine          = $this->getContainer()->get('doctrine');
         $skeletonDirectory = __DIR__ . '/../Resources/skeleton';
 
         try {
             $scopeGenerator = new ScopeGenerator(
-                $container->get('kernel'),
-                $doctrine,
-                $container->getParameter('glavweb_data_schema.scope_dir'),
+                $this->kernel,
+                $this->doctrine,
+                $this->scopeDir,
                 $skeletonDirectory
             );
 

@@ -13,7 +13,7 @@ namespace Glavweb\DataSchemaBundle\DataSchema;
 
 use Doctrine\Common\Annotations\Reader;
 use Symfony\Bridge\Twig\Extension\SecurityExtension;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
+use Symfony\Component\Security\Core\Security;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
@@ -25,9 +25,9 @@ use Symfony\Component\Security\Core\User\UserInterface;
 class Placeholder
 {
     /**
-     * @var TokenStorageInterface
+     * @var Security
      */
-    private $tokenStorage;
+    private $security;
 
     /**
      * @var \Twig_Environment
@@ -38,14 +38,14 @@ class Placeholder
      * AccessHandler constructor.
      *
      * @param Reader $annotationReader
-     * @param TokenStorageInterface $tokenStorage
+     * @param Security $security
      * @param SecurityExtension $securityExtension
      */
-    public function __construct(Reader $annotationReader, TokenStorageInterface $tokenStorage, SecurityExtension $securityExtension)
+    public function __construct(Reader $annotationReader, Security $security, SecurityExtension $securityExtension)
     {
-        $this->tokenStorage = $tokenStorage;
+        $this->security = $security;
 
-        $this->twigEnvironment = new \Twig_Environment(new \Twig_Loader_Array([]), [
+        $this->twigEnvironment = new \Twig\Environment(new \Twig\Loader\ArrayLoader([]), [
             'strict_variables' => true,
             'autoescape'       => false,
         ]);
@@ -61,7 +61,7 @@ class Placeholder
     public function condition($condition, $alias, UserInterface $user = null)
     {
         if (!$user) {
-            $user = $this->tokenStorage->getToken()->getUser();
+            $user = $this->security->getToken()->getUser();
         }
 
         $userId = null;

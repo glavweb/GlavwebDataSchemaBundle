@@ -31,8 +31,8 @@ class Configuration implements ConfigurationInterface
      */
     public function getConfigTreeBuilder()
     {
-        $treeBuilder = new TreeBuilder();
-        $rootNode = $treeBuilder->root('glavweb_data_schema');
+        $treeBuilder = new TreeBuilder('glavweb_data_schema');
+        $rootNode = $treeBuilder->getRootNode();
 
         $rootNode
             ->children()
