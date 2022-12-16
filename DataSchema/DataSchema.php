@@ -349,9 +349,24 @@ class DataSchema
             $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
             $isFromDb            = $propertyConfig['from_db'] ?? false;
 
-            $value = null;
+            $value  = null;
+            $source = $propertyConfig['source'] ?? null;
 
-            if (array_key_exists($propertyName, $data)) {
+            if ($source) {
+                $querySelects = $this->getQuerySelects($config);
+                $select = $querySelects[$source] ?? null;
+
+                if (!array_key_exists($source, $data) && !$select) {
+                    throw new \RuntimeException("Source \"$source\" must be defined in properties or selects.");
+                }
+
+                if ($select) {
+                    $data[$source] = $this->persister->getSelectQueryResult($class, $select, $id);
+                }
+
+                $value = $data[$source];
+
+            } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
 
                 if ($isNested && is_array($value)) {
@@ -426,15 +441,17 @@ class DataSchema
             $value               = null;
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
             $isHidden            = $propertyConfig['hidden'] ?? false;
+            $source              = $propertyConfig['source'] ?? null;
 
-            if (array_key_exists($propertyName, $data)) {
+            if ($source) {
+                if (!array_key_exists($source, $data)) {
+                    throw new \RuntimeException("Property \"$source\" must be defined.");
+                }
+                $value = $data[$source];
+
+            } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
 
-            } elseif ($propertyConfig['source'] && isset($data[$propertyConfig['source']])) {
-                $value = $data[$propertyConfig['source']];
-
-            } else {
-                $value = null;
             }
 
             if (is_array($value)) {
@@ -706,9 +723,11 @@ class DataSchema
     /**
      * @return array
      */
-    public function getQuerySelects(): array
+    public function getQuerySelects(array $config = null): array
     {
-        return $this->configuration['query']['selects'] ?? [];
+        $config = $config ?? $this->configuration;
+
+        return $config['query']['selects'] ?? [];
     }
 
     /**
