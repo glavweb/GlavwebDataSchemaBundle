@@ -11,6 +11,10 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 
+use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\NonUniqueResultException;
+use Doctrine\ORM\NoResultException;
+
 /**
  * Class PersisterInterface
  *
@@ -62,4 +66,14 @@ interface PersisterInterface
      * @return array
      */
     public function getPropertiesData(string $class, array $properties, int $id): array;
+
+    /**
+     * @param string $class
+     * @param string  $selectClause
+     * @param int    $id
+     * @return
+     * @throws NonUniqueResultException
+     * @throws NoResultException
+     */
+    public function getSelectQueryResult(string $class, string $selectClause, int $id);
 }

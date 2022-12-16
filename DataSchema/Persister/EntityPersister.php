@@ -218,4 +218,30 @@ class EntityPersister implements PersisterInterface
 
         return (array)$query->getSingleResult($this->hydrationMode);
     }
+
+    /**
+     * @param string $class
+     * @param string  $selectClause
+     * @param int    $id
+     * @return
+     * @throws NonUniqueResultException
+     * @throws NoResultException
+     */
+    public function getSelectQueryResult(string $class, string $selectClause, int $id)
+    {
+        /** @var EntityManager $em */
+        $em = $this->doctrine->getManager();
+        $qb = $em->createQueryBuilder();
+        $alias = 't';
+
+        $qb
+            ->select(sprintf('(%s)', $selectClause))
+            ->from($class, $alias)
+            ->where($alias . '.id = :id')
+            ->setParameter('id', $id);
+
+        $query = $qb->getQuery();
+
+        return $query->getSingleScalarResult();
+    }
 }
