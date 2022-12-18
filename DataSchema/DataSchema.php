@@ -47,6 +47,7 @@ class DataSchema
         'hidden'                  => false,
         'conditions'              => [],
         'roles'                   => [],
+        'hasSubclasses'           => false,
         'discriminatorColumnName' => null,
         'discriminatorMap'        => [],
         'tableName'               => null
@@ -215,6 +216,7 @@ class DataSchema
 
         if ($classMetadata instanceof ClassMetadata) {
             if ($classMetadata->subClasses) {
+                $configuration['hasSubclasses']           = true;
                 $configuration['discriminatorColumnName'] = $classMetadata->discriminatorColumn['name'];
                 $configuration['discriminatorMap']        = $classMetadata->discriminatorMap;
                 $discriminatorMap                         = $configuration['discriminatorMap'];
@@ -337,34 +339,35 @@ class DataSchema
      */
     private function fetchMissingPropertiesRecursive(array $data, array $config, array $scopeConfig = null): array
     {
-        $id       = $data['id'] ?? null;
-        $class    = $this->getDataClassName($config, $data);
-        $metadata = $this->dataSchemaService->getClassMetadata($class);
+        $id            = $data['id'] ?? null;
+        $class         = $this->getDataClassName($config, $data);
+        $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
+        $metadata      = $this->dataSchemaService->getClassMetadata($class);
 
         $result = $data + [];
         $fields = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
-            $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
-            $isFromDb            = $propertyConfig['from_db'] ?? false;
+            $propertyScopeConfig   = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
+            $isNested              = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $isFromDb              = $propertyConfig['from_db'] ?? false;
 
             $value  = null;
             $source = $propertyConfig['source'] ?? null;
+
+            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator) {
+                continue;
+            }
 
             if ($source) {
                 $querySelects = $this->getQuerySelects($config);
                 $select = $querySelects[$source] ?? null;
 
-                if (!array_key_exists($source, $data) && !$select) {
-                    throw new \RuntimeException("Source \"$source\" must be defined in properties or selects.");
-                }
-
                 if ($select) {
                     $data[$source] = $this->persister->getSelectQueryResult($class, $select, $id);
+                    $value = $data[$source];
                 }
-
-                $value = $data[$source];
 
             } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
@@ -433,15 +436,21 @@ class DataSchema
                                                string $parentClassName = null,
                                                string $parentPropertyName = null): array
     {
-        $class = $this->getDataClassName($config, $data);
+        $class         = $this->getDataClassName($config, $data);
+        $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
 
         $result = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $value               = null;
-            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
-            $isHidden            = $propertyConfig['hidden'] ?? false;
-            $source              = $propertyConfig['source'] ?? null;
+            $value                 = null;
+            $propertyScopeConfig   = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
+            $isHidden              = $propertyConfig['hidden'] ?? false;
+            $source                = $propertyConfig['source'] ?? null;
+
+            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator) {
+                continue;
+            }
 
             if ($source) {
                 if (!array_key_exists($source, $data)) {
@@ -835,12 +844,32 @@ class DataSchema
      * @param array $data
      * @return string
      */
+    private function getDiscriminatorValue(array $config, array $data): string
+    {
+        if (!$config['hasSubclasses']) {
+            throw new \InvalidArgumentException("Only class configurations with subclasses may have discriminator");
+        }
+
+        $discriminatorColumnName = $config['discriminatorColumnName'];
+
+        if (empty($data[$discriminatorColumnName])) {
+            throw new \InvalidArgumentException("Discriminator field \"$discriminatorColumnName\" must have value");
+        }
+
+        return $data[$discriminatorColumnName];
+    }
+
+    /**
+     * @param array $config
+     * @param array $data
+     * @return string
+     */
     private function getDataClassName(array $config, array $data): string
     {
         $class = $config['class'];
 
-        if ($config['discriminatorMap'] && isset($data[$config['discriminatorColumnName']])) {
-            $discriminator = $data[$config['discriminatorColumnName']];
+        if ($config['hasSubclasses']) {
+            $discriminator = $this->getDiscriminatorValue($config, $data);
             $class         = $config['discriminatorMap'][$discriminator];
         }
 
