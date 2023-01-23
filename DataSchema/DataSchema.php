@@ -348,15 +348,20 @@ class DataSchema
         $fields = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $propertyScopeConfig   = $scopeConfig[$propertyName] ?? [];
-            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
-            $isNested              = $this->dataSchemaService->isNestedProperty($propertyConfig);
-            $isFromDb              = $propertyConfig['from_db'] ?? false;
+            $propertyScopeConfig         = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator       = $propertyConfig['discriminator'] ?? null;
+            $isNested                    = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $isFromDb                    = $propertyConfig['from_db'] ?? false;
+            $ignoreDiscriminatorMismatch = $propertyConfig['ignore_discriminator_mismatch'];
+            $source                      = $propertyConfig['source'] ?? null;
 
             $value  = null;
-            $source = $propertyConfig['source'] ?? null;
 
-            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator) {
+            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator
+                && !(
+                    $ignoreDiscriminatorMismatch
+                    && $this->dataSchemaService->hasPropertyInSubclasses($config['class'], $propertyName)
+                )) {
                 continue;
             }
 
@@ -442,13 +447,18 @@ class DataSchema
         $result = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $value                 = null;
-            $propertyScopeConfig   = $scopeConfig[$propertyName] ?? [];
-            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
-            $isHidden              = $propertyConfig['hidden'] ?? false;
-            $source                = $propertyConfig['source'] ?? null;
+            $value                       = null;
+            $propertyScopeConfig         = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator       = $propertyConfig['discriminator'] ?? null;
+            $isHidden                    = $propertyConfig['hidden'] ?? false;
+            $source                      = $propertyConfig['source'] ?? null;
+            $ignoreDiscriminatorMismatch = $propertyConfig['ignore_discriminator_mismatch'];
 
-            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator) {
+            if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator
+                && !(
+                    $ignoreDiscriminatorMismatch
+                    && $this->dataSchemaService->hasPropertyInSubclasses($config['class'], $propertyName)
+                )) {
                 continue;
             }
 
