@@ -15,6 +15,7 @@ use Doctrine\ORM\Mapping\ClassMetadata;
 use Doctrine\ORM\Mapping\MappingException;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
+use Glavweb\DataSchemaBundle\Configuration\DataSchemaConfiguration;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterFactory;
 use Glavweb\DataSchemaBundle\DataSchema\Persister\PersisterInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\TransformEvent;
@@ -34,24 +35,6 @@ use Symfony\Component\Security\Core\User\UserInterface;
  */
 class DataSchema
 {
-    public const DEFAULTS = [
-        'schema'                  => null,
-        'class'                   => null,
-        'description'             => null,
-        'discriminator'           => null,
-        'filter_null_values'      => true,
-        'join'                    => 'none',
-        'type'                    => null,
-        'source'                  => null,
-        'decode'                  => null,
-        'hidden'                  => false,
-        'conditions'              => [],
-        'roles'                   => [],
-        'hasSubclasses'           => false,
-        'discriminatorColumnName' => null,
-        'discriminatorMap'        => [],
-        'tableName'               => null
-    ];
 
     /**
      * @var DataSchemaFactory
@@ -202,7 +185,7 @@ class DataSchema
     {
         $class = $class ?? $configuration['class'] ?? null;
 
-        $configuration          = array_replace(self::DEFAULTS, $configuration);
+        $configuration          = array_replace(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, $configuration);
         $configuration['class'] = $class;
 
         if (!$this->dataSchemaFilter->isGranted($configuration['roles'])) {
@@ -230,7 +213,7 @@ class DataSchema
 
         foreach ($identifierFieldNames as $idName) {
             if (!array_key_exists($idName, $configProperties)) {
-                $configProperties[$idName]            = array_merge(self::DEFAULTS, ['hidden' => true]);
+                $configProperties[$idName]            = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['hidden' => true]);
                 $configuration['properties'][$idName] = $configProperties[$idName];
             }
         }

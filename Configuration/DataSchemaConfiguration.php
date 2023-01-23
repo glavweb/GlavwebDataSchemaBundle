@@ -7,6 +7,25 @@ use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 class DataSchemaConfiguration implements ConfigurationInterface
 {
+    public const PROPERTIES_DEFAULT_VALUES = [
+        'schema'                        => null,
+        'class'                         => null,
+        'description'                   => null,
+        'discriminator'                 => null,
+        'ignore_discriminator_mismatch' => false,
+        'filter_null_values'            => true,
+        'join'                          => 'none',
+        'type'                          => null,
+        'source'                        => null,
+        'decode'                        => null,
+        'hidden'                        => false,
+        'conditions'                    => [],
+        'roles'                         => [],
+        'hasSubclasses'                 => false,
+        'discriminatorColumnName'       => null,
+        'discriminatorMap'              => [],
+        'tableName'                     => null
+    ];
     /**
      * @var int
      */
@@ -82,40 +101,41 @@ class DataSchemaConfiguration implements ConfigurationInterface
             ->arrayPrototype()
                 ->children()
                     ->scalarNode('schema')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['schema'])
                     ->end()
                     ->scalarNode('class')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['class'])
                     ->end()
                     ->scalarNode('description')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['description'])
                     ->end()
                     ->scalarNode('discriminator')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['discriminator'])
                     ->end()
                     ->booleanNode('ignore_discriminator_mismatch')
-                        ->defaultFalse()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['ignore_discriminator_mismatch'])
                     ->end()
                     ->booleanNode('filter_null_values')
-                        ->defaultTrue()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['filter_null_values'])
                     ->end()
                     ->enumNode('join')
-                        ->defaultValue('none')
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['join'])
                         ->values(['none', 'left', 'inner'])
                     ->end()
                     ->scalarNode('type')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['type'])
                     ->end()
                     ->scalarNode('source')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['source'])
                     ->end()
                     ->scalarNode('decode')
-                        ->defaultNull()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['decode'])
                     ->end()
                     ->scalarNode('hidden')
-                        ->defaultFalse()
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['hidden'])
                     ->end()
                     ->arrayNode('conditions')
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['conditions'])
                         ->scalarPrototype()->end()
                     ->end()
                 ->end()
