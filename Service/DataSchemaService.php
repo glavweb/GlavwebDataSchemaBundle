@@ -300,14 +300,14 @@ class DataSchemaService
     }
 
     /**
-     * @param array $propertyConfiguraion
+     * @param array $propertyConfiguration
      * @return bool
      */
-    public function isNestedProperty(array $propertyConfiguraion): bool
+    public function isNestedProperty(array $propertyConfiguration): bool
     {
-        $schema     = $propertyConfiguraion['schema'] ?? null;
-        $class      = $propertyConfiguraion['class'] ?? null;
-        $properties = $propertyConfiguraion['properties'] ?? [];
+        $schema     = $propertyConfiguration['schema'] ?? null;
+        $class      = $propertyConfiguration['class'] ?? null;
+        $properties = $propertyConfiguration['properties'] ?? [];
 
         return $schema || $class || $properties;
     }
@@ -319,6 +319,30 @@ class DataSchemaService
     public function getClassMetadata(string $class): ClassMetadata
     {
         return $this->doctrine->getManager()->getClassMetadata($class);
+    }
+
+    /**
+     * @param string $class
+     * @param string $propertyName
+     * @return bool
+     */
+    public function hasPropertyInSubclasses(string $class, string $propertyName): bool
+    {
+        $superClassMetadata   = $this->getClassMetadata($class);
+
+        foreach ($superClassMetadata->subClasses as $subClass) {
+            $subClassMetadata = $this->getClassMetadata($subClass);
+
+            if (in_array($propertyName, $subClassMetadata->fieldNames, true)) {
+                return true;
+            }
+
+            if (array_key_exists($propertyName, $subClassMetadata->associationMappings)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
