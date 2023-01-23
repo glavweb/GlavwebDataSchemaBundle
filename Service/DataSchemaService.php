@@ -333,11 +333,11 @@ class DataSchemaService
         foreach ($superClassMetadata->subClasses as $subClass) {
             $subClassMetadata = $this->getClassMetadata($subClass);
 
-            if (in_array($propertyName, $subClassMetadata->fieldNames, true)) {
+            if (in_array($propertyName, $subClassMetadata->getFieldNames(), true)) {
                 return true;
             }
 
-            if (array_key_exists($propertyName, $subClassMetadata->associationMappings)) {
+            if (in_array($propertyName, $subClassMetadata->getAssociationNames(), true)) {
                 return true;
             }
         }
