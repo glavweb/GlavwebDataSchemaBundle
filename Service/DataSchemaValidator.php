@@ -144,6 +144,10 @@ class DataSchemaValidator
         $discriminator = $config['discriminator'] ?? null;
         $join          = $config['join'] ?? null;
 
+        if ($classMetadata->discriminatorColumn['name'] ?? null === $name) {
+            return;
+        }
+
         if (!$classMetadata->hasField($name) && !$classMetadata->hasAssociation($name)) {
             $discriminatorMap = $classMetadata->discriminatorMap;
             if (!$discriminatorMap) {

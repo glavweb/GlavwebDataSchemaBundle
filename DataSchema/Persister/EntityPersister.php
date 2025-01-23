@@ -175,8 +175,12 @@ class EntityPersister implements PersisterInterface
                 ->setParameter('sourceId', $id);
         }
 
-        foreach ($conditions as $condition) {
-            $preparedCondition = $this->dataSchema->conditionPlaceholder($condition, $targetAlias);
+        foreach ($conditions as $conditionConfig) {
+            if (!$conditionConfig['enabled']) {
+                continue;
+            }
+
+            $preparedCondition = $this->dataSchema->conditionPlaceholder($conditionConfig['condition'], $targetAlias);
             if ($preparedCondition) {
                 $qb->andWhere($preparedCondition);
             }

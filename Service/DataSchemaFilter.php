@@ -3,6 +3,7 @@
 namespace Glavweb\DataSchemaBundle\Service;
 
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Glavweb\DataSchemaBundle\Configuration\DataSchemaConfiguration;
 use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
@@ -66,7 +67,7 @@ class DataSchemaFilter
 
                 $source = $propertyConfig['source'] ?? null;
 
-                if ($source) {
+                if ($source !== null && $source !== DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
                     $propertySourcesStack = $this->dataSchemaService->getPropertySourcesStack($config, $propertyName);
                     foreach ($propertySourcesStack as [$sourcePropertyName, $sourcePropertyConfig]) {
                         if (!isset($properties[$sourcePropertyName]) && $sourcePropertyConfig) {
