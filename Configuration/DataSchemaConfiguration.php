@@ -20,12 +20,16 @@ class DataSchemaConfiguration implements ConfigurationInterface
         'decode'                        => null,
         'hidden'                        => false,
         'conditions'                    => [],
+        'orderBy'                       => [],
         'roles'                         => [],
         'hasSubclasses'                 => false,
         'discriminatorColumnName'       => null,
         'discriminatorMap'              => [],
         'tableName'                     => null
     ];
+
+    public const SOURCE_SELF_TOKEN = '$';
+
     /**
      * @var int
      */
@@ -136,7 +140,38 @@ class DataSchemaConfiguration implements ConfigurationInterface
                     ->end()
                     ->arrayNode('conditions')
                         ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['conditions'])
-                        ->scalarPrototype()->end()
+                        ->useAttributeAsKey('name')
+                        ->arrayPrototype()
+                            ->canBeDisabled()
+                            ->beforeNormalization()
+                                ->ifString()
+                                ->then(function ($v) { return ['condition' => $v]; })
+                            ->end()
+                            ->children()
+                                ->scalarNode('name')->end()
+                                ->scalarNode('condition')->isRequired()->end()
+                            ->end()
+                        ->end()
+                    ->end()
+                    ->arrayNode('orderBy')
+                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['orderBy'])
+                        ->variablePrototype()
+                        ->end()
+                        ->validate()
+                            ->always(static function ($value) {
+                                if (is_array($value)) {
+                                    foreach ($value as $k => $v) {
+                                        if (!in_array(strtolower($v), ['asc', 'desc'])) {
+                                            throw new \InvalidArgumentException("The value \"{$v}\" for key \"$k\" is not a valid order by.");
+                                        }
+                                    }
+
+                                    return $value;
+                                } else {
+                                    return null;
+                                }
+                            })
+                        ->end()
                     ->end()
                 ->end()
                 ->append($this->addPropertiesNode(--$depth))

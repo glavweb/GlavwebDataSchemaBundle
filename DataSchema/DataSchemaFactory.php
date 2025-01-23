@@ -127,23 +127,26 @@ class DataSchemaFactory
             $dataSchemaConfig,
             $scopeConfig,
             $this->nestingDepth,
+            '',
             $this->defaultHydratorMode
         );
     }
 
     /**
-     * @param string   $dataSchemaFile
-     * @param array    $configuration
-     * @param null     $scopeConfig
+     * @param string $dataSchemaFile
+     * @param array $configuration
      * @param int|null $nestingDepth
+     * @param string $propertyPath
+     * @param null $scopeConfig
      * @return DataSchema
-     * @throws MappingException
      * @throws InvalidConfigurationException
+     * @throws MappingException
      */
     public function createNestedDataSchema(string $dataSchemaFile,
                                            array $configuration,
-                                           $scopeConfig = null,
-                                           int $nestingDepth = null): DataSchema
+                                           int $nestingDepth,
+                                           string $propertyPath,
+                                           $scopeConfig = null): DataSchema
     {
         $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 
@@ -161,6 +164,7 @@ class DataSchemaFactory
             $mergedConfig,
             $scopeConfig,
             $nestingDepth,
+            $propertyPath,
             $this->defaultHydratorMode
         );
     }

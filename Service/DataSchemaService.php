@@ -214,7 +214,7 @@ class DataSchemaService
 
         try {
             while ($currentPropertyName = $propertyConfig['source'] ?? null) {
-                if (array_key_exists($currentPropertyName, $selects)) {
+                if ($currentPropertyName === DataSchemaConfiguration::SOURCE_SELF_TOKEN || array_key_exists($currentPropertyName, $selects)) {
                     break;
                 }
 
@@ -229,6 +229,12 @@ class DataSchemaService
                 if (!$propertyConfig) {
                     throw new InvalidConfigurationPropertyException(
                         $propertyName, "Invalid \"source\" option. Referred property \"$currentPropertyName\" doesn't exist in configuration."
+                    );
+                }
+
+                if ($this->isNestedProperty($propertyConfig)) {
+                    throw new InvalidConfigurationPropertyException(
+                        $propertyName, "Invalid \"source\" option. Referred property \"$currentPropertyName\" should have scalar type."
                     );
                 }
 

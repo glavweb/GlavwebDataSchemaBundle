@@ -91,14 +91,15 @@ class DataSchema
      *
      * @param DataSchemaFactory $dataSchemaFactory
      * @param DataSchemaService $dataSchemaService
-     * @param DataSchemaFilter  $dataSchemaFilter
-     * @param PersisterFactory  $persisterFactory
-     * @param Placeholder       $placeholder
-     * @param ObjectHydrator    $objectHydrator
-     * @param array             $configuration
-     * @param array|null        $scopeConfig
-     * @param int|null          $nestingDepth
-     * @param string|null       $defaultHydratorMode
+     * @param DataSchemaFilter $dataSchemaFilter
+     * @param PersisterFactory $persisterFactory
+     * @param Placeholder $placeholder
+     * @param ObjectHydrator $objectHydrator
+     * @param array $configuration
+     * @param array|null $scopeConfig
+     * @param int|null $nestingDepth
+     * @param string $propertyPath
+     * @param string|null $defaultHydratorMode
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
@@ -111,6 +112,7 @@ class DataSchema
                                 array $configuration,
                                 array $scopeConfig = null,
                                 int $nestingDepth = null,
+                                string $propertyPath = '',
                                 string $defaultHydratorMode = null)
     {
         $this->dataSchemaFactory   = $dataSchemaFactory;
@@ -131,8 +133,10 @@ class DataSchema
         $this->dataSchemaService->stopStopwatch('filter');
         $this->dataSchemaService->startStopwatch('prepareConfiguration');
 
+        $childPropertyPath = $propertyPath . ' > ' . $configuration['schema'];
+
         $this->configuration =
-            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth);
+            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth, $childPropertyPath);
         $this->dataSchemaService->stopStopwatch('prepareConfiguration');
 
     }
@@ -170,10 +174,11 @@ class DataSchema
     }
 
     /**
-     * @param array       $configuration
+     * @param array $configuration
      * @param string|null $class
-     * @param array|null  $scopeConfig
-     * @param int         $nestingDepth
+     * @param array|null $scopeConfig
+     * @param int $nestingDepth
+     * @param string $propertyPath
      * @return array
      * @throws InvalidConfigurationException
      * @throws MappingException
@@ -181,8 +186,13 @@ class DataSchema
     protected function prepareConfiguration(array $configuration,
                                             ?string $class,
                                             array $scopeConfig = null,
-                                            int $nestingDepth = 0): array
+                                            int $nestingDepth = 0,
+                                            string $propertyPath = ''): array
     {
+        if ($nestingDepth < 0) {
+            throw new InvalidConfigurationException($configuration, "Maximum nesting depth exceeded $propertyPath");
+        }
+
         $class = $class ?? $configuration['class'] ?? null;
 
         $configuration          = array_replace(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, $configuration);
@@ -228,6 +238,7 @@ class DataSchema
                     $schema,
                     $propertyConfig,
                     $nestingDepth - 1,
+                    $propertyPath . ' > ' .  $propertyName,
                     $propertyScopeConfig
                 );
             }
@@ -261,7 +272,8 @@ class DataSchema
                     $propertyConfig,
                     $propertyClass,
                     $propertyScopeConfig,
-                    $nestingDepth - 1
+                    $nestingDepth - 1,
+                    $propertyPath . ' > ' .  $propertyName
                 );
 
                 if ($propertyConfig && $propertyOwnerClassMetadata instanceof ClassMetadata
@@ -288,6 +300,16 @@ class DataSchema
         $configuration['properties'] = $properties;
 
         return $configuration;
+    }
+
+    /**
+     * @param string $name
+     * @param string $source
+     * @return void
+     */
+    public function addPropertyFromSelect(string $name, string $source): void
+    {
+        $this->configuration['properties'][$name] = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['source' => $source]);
     }
 
     /**
@@ -348,14 +370,23 @@ class DataSchema
                 continue;
             }
 
-            if ($source) {
-                $querySelects = $this->getQuerySelects($config);
-                $select = $querySelects[$source] ?? null;
+            if ($source === DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
+                $value = $data;
 
-                if ($select) {
-                    $data[$source] = $this->persister->getSelectQueryResult($class, $select, $id);
-                    $value = $data[$source];
+            } elseif ($source) {
+
+                if (!array_key_exists($source, $data)) {
+                    $querySelects = $this->getQuerySelects($config);
+                    $select = $querySelects[$source] ?? null;
+
+                    if (!$select) {
+                        throw new \RuntimeException("Source \"$source\" must be defined in properties or selects.");
+                    }
+
+                    $data[$source] = $id !== null ? $this->persister->getSelectQueryResult($class, $select, $id) : null;
                 }
+
+                $value = $data[$source];
 
             } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
@@ -445,7 +476,10 @@ class DataSchema
                 continue;
             }
 
-            if ($source) {
+            if ($source === DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
+                $value = $data;
+
+            } elseif ($source) {
                 if (!array_key_exists($source, $data)) {
                     throw new \RuntimeException("Property \"$source\" must be defined.");
                 }
@@ -722,6 +756,7 @@ class DataSchema
     }
 
     /**
+     * @param array|null $config
      * @return array
      */
     public function getQuerySelects(array $config = null): array
@@ -749,6 +784,132 @@ class DataSchema
         }
 
         return $propertyConfiguration;
+    }
+
+    /**
+     * @param callable $modify
+     * @return array
+     */
+    public function modifyConfiguration(callable $modify): array
+    {
+        return $this->configuration = $modify($this->configuration);
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param callable $modify
+     * @return array
+     */
+    public function modifyPropertyConfiguration(string $propertyPath, callable $modify): array
+    {
+        $configuration = $this->configuration;
+        $propertyConfiguration = &$configuration;
+
+        $properties = null;
+        $propertyKey = null;
+        $propertyPathParts = explode('.', $propertyPath);
+        foreach ($propertyPathParts as $propertyName) {
+            if (!isset($propertyConfiguration['properties'][$propertyName])) {
+                throw new \InvalidArgumentException('Property "' . $propertyPath . '" does not exist.');
+            }
+
+            $properties = &$propertyConfiguration['properties'];
+            $propertyKey = $propertyName;
+            $propertyConfiguration = &$propertyConfiguration['properties'][$propertyKey];
+        }
+
+        $properties[$propertyKey] = $modify($propertyConfiguration);
+
+        $this->configuration = $configuration;
+
+        return $properties[$propertyKey];
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param string $conditionName
+     * @return self
+     */
+    public function enablePropertyCondition(string $propertyPath, string $conditionName): self
+    {
+        $this->setPropertyConditionEnabled($propertyPath, $conditionName, true);
+
+        return $this;
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param string $conditionName
+     * @return self
+     */
+    public function disablePropertyCondition(string $propertyPath, string $conditionName): self
+    {
+        $this->setPropertyConditionEnabled($propertyPath, $conditionName, false);
+
+        return $this;
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param string $orderByPropertyName
+     * @param string $order
+     * @return $this
+     */
+    public function setPropertyOrderBy(string $propertyPath, string $orderByPropertyName, string $order): self
+    {
+        if (!in_array(strtolower($order), ['asc', 'desc'], true)) {
+            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"$propertyPath\" is not allowed.");
+        }
+
+        $this->modifyPropertyConfiguration($propertyPath, static function ($configuration) use ($order, $orderByPropertyName) {
+            $configuration['orderBy'] = [$orderByPropertyName => $order];
+
+            return $configuration;
+        });
+
+        return $this;
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param string $orderByPropertyName
+     * @param string $order
+     * @return $this
+     */
+    public function addPropertyOrderBy(string $propertyPath, string $orderByPropertyName, string $order): self
+    {
+        if (!in_array(strtolower($order), ['asc', 'desc'], true)) {
+            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"$propertyPath\" is not allowed.");
+        }
+
+        $this->modifyPropertyConfiguration($propertyPath, static function ($configuration) use ($order, $orderByPropertyName) {
+            $configuration['orderBy'][$orderByPropertyName] = $order;
+
+            return $configuration;
+        });
+
+        return $this;
+    }
+
+    /**
+     * @param string $propertyPath
+     * @param string $conditionName
+     * @param bool $enabled
+     * @return self
+     */
+    protected function setPropertyConditionEnabled(string $propertyPath, string $conditionName, bool $enabled): self
+    {
+        $this->modifyPropertyConfiguration($propertyPath, static function ($config) use ($enabled, $propertyPath, $conditionName) {
+            if (!isset($config['conditions'][$conditionName])) {
+                throw new \InvalidArgumentException("Condition '$conditionName' for property '$propertyPath' is not defined.");
+            }
+
+            $config['conditions'][$conditionName]['enabled'] = $enabled;
+
+            return $config;
+        });
+
+        return $this;
     }
 
     /**
@@ -792,9 +953,10 @@ class DataSchema
     }
 
     /**
-     * @param string     $dataSchemaFile
-     * @param array      $configuration
-     * @param int        $nestingDepth
+     * @param string $dataSchemaFile
+     * @param array $configuration
+     * @param int $nestingDepth
+     * @param string $propertyPath
      * @param array|null $scopeConfig
      * @return array
      * @throws InvalidConfigurationException
@@ -803,14 +965,16 @@ class DataSchema
     private function getNestedDataSchemaConfiguration(string $dataSchemaFile,
                                                       array $configuration,
                                                       int $nestingDepth,
+                                                      string $propertyPath,
                                                       array $scopeConfig = null): array
     {
 
         $dataSchema = $this->dataSchemaFactory->createNestedDataSchema(
             $dataSchemaFile,
             $configuration,
-            $scopeConfig,
-            $nestingDepth
+            $nestingDepth,
+            $propertyPath,
+            $scopeConfig
         );
 
         return $dataSchema->getConfiguration();
