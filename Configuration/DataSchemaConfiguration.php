@@ -82,6 +82,7 @@ class DataSchemaConfiguration implements ConfigurationInterface
                         ->end()
                     ->end()
                 ->end()
+                ->append($this->addConditionsNode())
                 ->append($this->addPropertiesNode($this->nestingDepth))
             ->end()
         ;
@@ -138,21 +139,7 @@ class DataSchemaConfiguration implements ConfigurationInterface
                     ->scalarNode('hidden')
                         ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['hidden'])
                     ->end()
-                    ->arrayNode('conditions')
-                        ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['conditions'])
-                        ->useAttributeAsKey('name')
-                        ->arrayPrototype()
-                            ->canBeDisabled()
-                            ->beforeNormalization()
-                                ->ifString()
-                                ->then(function ($v) { return ['condition' => $v]; })
-                            ->end()
-                            ->children()
-                                ->scalarNode('name')->end()
-                                ->scalarNode('condition')->isRequired()->end()
-                            ->end()
-                        ->end()
-                    ->end()
+                    ->append($this->addConditionsNode())
                     ->arrayNode('orderBy')
                         ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['orderBy'])
                         ->variablePrototype()
@@ -179,5 +166,25 @@ class DataSchemaConfiguration implements ConfigurationInterface
         ;
 
         return $rootNode;
+    }
+
+    public function addConditionsNode()
+    {
+        $treeBuilder = new TreeBuilder();
+
+        return $treeBuilder->root('conditions')
+            ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['conditions'])
+            ->useAttributeAsKey('name')
+            ->arrayPrototype()
+                ->canBeDisabled()
+                ->beforeNormalization()
+                    ->ifString()
+                    ->then(function ($v) { return ['condition' => $v]; })
+                ->end()
+                ->children()
+                    ->scalarNode('name')->end()
+                    ->scalarNode('condition')->isRequired()->end()
+                ->end()
+            ->end();
     }
 }
