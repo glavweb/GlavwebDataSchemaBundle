@@ -462,7 +462,9 @@ class DataSchema
                 }
 
                 if ($propertyConfig['type'] === 'entity') {
-                    if (!$this->isOnlyNullInArray($value)) {
+                    if ($this->isOnlyNullInArray($value) && $config['filter_null_values']) {
+                        $value = null;
+                    } else {
                         $value = $this->modifyPropertiesRecursive(
                             $value,
                             $propertyConfig,
@@ -470,9 +472,6 @@ class DataSchema
                             $class,
                             $propertyName
                         );
-
-                    } else if (!$config['filter_null_values']) {
-                        $value = null;
                     }
 
                 } elseif ($propertyConfig['type'] === 'collection') {
