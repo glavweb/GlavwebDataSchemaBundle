@@ -344,6 +344,10 @@ class DataSchema
      */
     private function fetchMissingPropertiesRecursive(array $data, array $config, array $scopeConfig = null): array
     {
+        if ($this->isOnlyNullInArray($data)) {
+            return $data;
+        }
+
         $id            = $data['id'] ?? null;
         $class         = $this->getDataClassName($config, $data);
         $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
