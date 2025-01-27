@@ -349,7 +349,7 @@ class DataSchema
         $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
         $metadata      = $this->dataSchemaService->getClassMetadata($class);
 
-        $result = $data + [];
+        $result = $data;
         $fields = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
@@ -370,23 +370,18 @@ class DataSchema
                 continue;
             }
 
-            if ($source === DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
-                $value = $data;
+            if ($source) {
+                if (array_key_exists($propertyName, $data)) {
+                    $value = $data[$propertyName];
 
-            } elseif ($source) {
-
-                if (!array_key_exists($source, $data)) {
+                } elseif ($source !== DataSchemaConfiguration::SOURCE_SELF_TOKEN && $source === $propertyName) {
                     $querySelects = $this->getQuerySelects($config);
                     $select = $querySelects[$source] ?? null;
 
-                    if (!$select) {
-                        throw new \RuntimeException("Source \"$source\" must be defined in properties or selects.");
+                    if ($select) {
+                        $value = $id !== null ? $this->persister->getSelectQueryResult($class, $select, $id) : null;
                     }
-
-                    $data[$source] = $id !== null ? $this->persister->getSelectQueryResult($class, $select, $id) : null;
                 }
-
-                $value = $data[$source];
 
             } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
@@ -457,6 +452,7 @@ class DataSchema
     {
         $class         = $this->getDataClassName($config, $data);
         $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
+        $selects       = $this->getQuerySelects($config);
 
         $result = [];
 
@@ -466,6 +462,7 @@ class DataSchema
             $propertyDiscriminator       = $propertyConfig['discriminator'] ?? null;
             $isHidden                    = $propertyConfig['hidden'] ?? false;
             $source                      = $propertyConfig['source'] ?? null;
+            $decode                      = $propertyConfig['decode'] ?? null;
             $ignoreDiscriminatorMismatch = $propertyConfig['ignore_discriminator_mismatch'];
 
             if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator
@@ -476,14 +473,14 @@ class DataSchema
                 continue;
             }
 
-            if ($source === DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
-                $value = $data;
+            if ($source && $source !== DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
+                $isPostModificationSource = !empty($config['properties'][$source]['source']) && !array_key_exists($source, $selects);
 
-            } elseif ($source) {
-                if (!array_key_exists($source, $data)) {
+                if ($isPostModificationSource ? !array_key_exists($source, $result) : !array_key_exists($source, $data)) {
                     throw new \RuntimeException("Property \"$source\" must be defined.");
                 }
-                $value = $data[$source];
+
+                $value = $isPostModificationSource ? $result[$source] : $data[$source];
 
             } elseif (array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
@@ -530,7 +527,7 @@ class DataSchema
                 }
             }
 
-            if ($propertyConfig['decode']) {
+            if ($decode) {
                 $transformEvent = new TransformEvent(
                     $class,
                     $propertyName,
@@ -542,7 +539,11 @@ class DataSchema
                     $this->dataSchemaFactory
                 );
 
-                $value = $this->decode($value, $propertyConfig['decode'], $transformEvent);
+                if ($source === DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
+                    $value = $data;
+                }
+
+                $value = $this->decode($value, $decode, $transformEvent);
 
                 if (is_array($value) && $propertyScopeConfig) {
                     $value = $this->getScopedData(
