@@ -46,7 +46,7 @@ class DataTransformerRegistry
 
     /**
      * @param string $name
-     * @return DataTransformerInterface
+     * @return bool
      */
     public function has($name)
     {

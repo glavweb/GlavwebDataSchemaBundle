@@ -28,6 +28,12 @@ class DataSchemaConfiguration implements ConfigurationInterface
         'tableName'                     => null
     ];
 
+    public const CONDITIONS_DEFAULT_VALUES = [
+        'enabled'                       => true,
+        'name'                          => null,
+        'condition'                     => null
+    ];
+
     public const SOURCE_SELF_TOKEN = '$';
 
     /**

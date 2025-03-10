@@ -11,6 +11,7 @@
 
 namespace Glavweb\DataSchemaBundle;
 
+use Glavweb\DataSchemaBundle\DependencyInjection\Compiler\ConfigTransformerPass;
 use Glavweb\DataSchemaBundle\DependencyInjection\Compiler\DataTransformerPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
@@ -31,5 +32,6 @@ class GlavwebDataSchemaBundle extends Bundle
         parent::build($container);
 
         $container->addCompilerPass(new DataTransformerPass());
+        $container->addCompilerPass(new ConfigTransformerPass());
     }
 }

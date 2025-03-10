@@ -11,6 +11,9 @@
 
 namespace Glavweb\DataSchemaBundle\DependencyInjection;
 
+use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerInterface;
+use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerInterface;
+use Glavweb\DataSchemaBundle\Extension\ExtensionInterface;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader;
@@ -43,5 +46,9 @@ class GlavwebDataSchemaExtension extends Extension
         $container->setParameter('glavweb_data_schema.data_schema_dir', $config['data_schema']['dir']);
         $container->setParameter('glavweb_data_schema.data_schema_max_nesting_depth', $config['data_schema']['max_nesting_depth']);
         $container->setParameter('glavweb_data_schema.scope_dir', $config['scope']['dir']);
+
+        $container->registerForAutoconfiguration(ExtensionInterface::class)->addTag('glavweb_data_schema.extension');
+        $container->registerForAutoconfiguration(DataTransformerInterface::class)->addTag('glavweb_data_schema.data_transformer');
+        $container->registerForAutoconfiguration(ConfigTransformerInterface::class)->addTag('glavweb_data_schema.config_transformer');
     }
 }
