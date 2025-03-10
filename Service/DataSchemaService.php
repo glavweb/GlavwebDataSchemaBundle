@@ -4,9 +4,12 @@ namespace Glavweb\DataSchemaBundle\Service;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\Mapping\ClassMetadata;
+use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerRegistry;
+use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformEvent;
 use Glavweb\DataSchemaBundle\Configuration\DataSchemaConfiguration;
 use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry;
+use Glavweb\DataSchemaBundle\DataTransformer\TransformEvent;
 use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationException;
 use Glavweb\DataSchemaBundle\Exception\DataSchema\InvalidConfigurationPropertyException;
 use Glavweb\DataSchemaBundle\Exception\DataTransformer\DataTransformerNotExists;
@@ -43,6 +46,11 @@ class DataSchemaService
     private $dataTransformerRegistry;
 
     /**
+     * @var ConfigTransformerRegistry
+     */
+    private $configTransformerRegistry;
+
+    /**
      * @var FileLocator
      */
     private $scopeFileLocator;
@@ -67,6 +75,7 @@ class DataSchemaService
      */
     public function __construct(Registry $doctrine,
                                 DataTransformerRegistry $dataTransformerRegistry,
+                                ConfigTransformerRegistry $configTransformerRegistry,
                                 string $dataSchemaDir,
                                 string $scopeDir,
                                 int $nestingDepth,
@@ -74,6 +83,7 @@ class DataSchemaService
     {
         $this->doctrine                = $doctrine;
         $this->dataTransformerRegistry = $dataTransformerRegistry;
+        $this->configTransformerRegistry = $configTransformerRegistry;
         $this->nestingDepth            = $nestingDepth;
         $this->dataSchemaFileLocator   = new FileLocator($dataSchemaDir);
         $this->scopeFileLocator        = new FileLocator($scopeDir);
@@ -361,5 +371,58 @@ class DataSchemaService
         }
 
         return $this->dataTransformerRegistry->get($name);
+    }
+
+    /**
+     * @param mixed $value
+     * @param string $decodeString
+     * @param TransformEvent $transformEvent
+     * @return mixed
+     * @throws DataTransformerNotExists
+     */
+    public function decode($value, string $decodeString, TransformEvent $transformEvent)
+    {
+        $dataTransformerNames = $this->parseDecodeString($decodeString);
+
+        foreach ($dataTransformerNames as $dataTransformerName) {
+            $transformer = $this->getDataTransformer($dataTransformerName);
+            $value = $transformer->transform($value, $transformEvent);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param array $config
+     * @param array $rootConfig
+     * @param array|null $scopeConfig
+     * @param string|null $queryLanguage
+     * @param array $path
+     * @return array []
+     */
+    public function reconfigureByExtensions(array  $config,
+                                            array  $rootConfig,
+                                            array  $scopeConfig = null,
+                                            string $queryLanguage = null,
+                                            array  $path = []): array
+    {
+        $properties = $config['properties'] ?? [];
+
+        foreach ($properties as $propertyName => $propertyConfig) {
+            if ($this->isNestedProperty($propertyConfig)) {
+                $propertyPath = \array_merge($path, [$propertyName]);
+                $config['properties'][$propertyName] = $this->reconfigureByExtensions(
+                    $propertyConfig, $rootConfig, $scopeConfig, $queryLanguage, $propertyPath
+                );
+            }
+        }
+
+        $result = $config;
+
+        foreach ($this->configTransformerRegistry->getAll() as $transformer) {
+            $result = $transformer->transform($result, new ConfigTransformEvent($path, $rootConfig, $scopeConfig, $queryLanguage));
+        }
+
+        return $result;
     }
 }

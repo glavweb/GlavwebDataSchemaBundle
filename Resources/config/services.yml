@@ -5,6 +5,7 @@ services:
         arguments:
             - "@doctrine"
             - "@glavweb_data_schema.data_transformer_registry"
+            - "@glavweb_data_schema.config_transformer_registry"
             - "%glavweb_data_schema.data_schema_dir%"
             - "%glavweb_data_schema.scope_dir%"
             - "%glavweb_data_schema.data_schema_max_nesting_depth%"
@@ -49,6 +50,9 @@ services:
 
     glavweb_data_schema.data_transformer_registry:
         class:  Glavweb\DataSchemaBundle\DataTransformer\DataTransformerRegistry
+
+    glavweb_data_schema.config_transformer_registry:
+        class:  Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerRegistry
 
     glavweb_data_schema.orm_object_hydrator:
         class:  Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator

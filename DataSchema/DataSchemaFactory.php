@@ -101,12 +101,14 @@ class DataSchemaFactory
     }
 
     /**
-     * @param string      $dataSchemaFile
+     * @param string $dataSchemaFile
      * @param string|null $scopeFile
+     * @param string|null $queryLanguage
      * @return DataSchema
-     * @throws InvalidConfigurationException|MappingException
+     * @throws InvalidConfigurationException
+     * @throws MappingException
      */
-    public function createDataSchema(string $dataSchemaFile, string $scopeFile = null): DataSchema
+    public function createDataSchema(string $dataSchemaFile, string $scopeFile = null, string $queryLanguage = null): DataSchema
     {
         $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 
@@ -126,8 +128,9 @@ class DataSchemaFactory
             $this->objectHydrator,
             $dataSchemaConfig,
             $scopeConfig,
+            $queryLanguage,
             $this->nestingDepth,
-            '',
+            [],
             $this->defaultHydratorMode
         );
     }
@@ -136,17 +139,19 @@ class DataSchemaFactory
      * @param string $dataSchemaFile
      * @param array $configuration
      * @param int|null $nestingDepth
-     * @param string $propertyPath
-     * @param null $scopeConfig
+     * @param array $path
+     * @param array|null $scopeConfig
+     * @param string|null $queryLanguage
      * @return DataSchema
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
     public function createNestedDataSchema(string $dataSchemaFile,
-                                           array $configuration,
-                                           int $nestingDepth,
-                                           string $propertyPath,
-                                           $scopeConfig = null): DataSchema
+                                           array  $configuration,
+                                           int    $nestingDepth,
+                                           array  $path,
+                                           array  $scopeConfig = null,
+                                           string $queryLanguage = null): DataSchema
     {
         $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 
@@ -163,10 +168,10 @@ class DataSchemaFactory
             $this->objectHydrator,
             $mergedConfig,
             $scopeConfig,
+            $queryLanguage,
             $nestingDepth,
-            $propertyPath,
+            $path,
             $this->defaultHydratorMode
         );
     }
-
 }

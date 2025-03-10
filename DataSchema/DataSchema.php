@@ -87,6 +87,11 @@ class DataSchema
     private $dataSchemaFilter;
 
     /**
+     * @var string|null
+     */
+    private $queryLanguage;
+
+    /**
      * DataSchema constructor.
      *
      * @param DataSchemaFactory $dataSchemaFactory
@@ -97,23 +102,25 @@ class DataSchema
      * @param ObjectHydrator $objectHydrator
      * @param array $configuration
      * @param array|null $scopeConfig
+     * @param string|null $queryLanguage
      * @param int|null $nestingDepth
-     * @param string $propertyPath
+     * @param array $path
      * @param string|null $defaultHydratorMode
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
     public function __construct(DataSchemaFactory $dataSchemaFactory,
                                 DataSchemaService $dataSchemaService,
-                                DataSchemaFilter $dataSchemaFilter,
-                                PersisterFactory $persisterFactory,
-                                Placeholder $placeholder,
-                                ObjectHydrator $objectHydrator,
-                                array $configuration,
-                                array $scopeConfig = null,
-                                int $nestingDepth = null,
-                                string $propertyPath = '',
-                                string $defaultHydratorMode = null)
+                                DataSchemaFilter  $dataSchemaFilter,
+                                PersisterFactory  $persisterFactory,
+                                Placeholder       $placeholder,
+                                ObjectHydrator    $objectHydrator,
+                                array             $configuration,
+                                array             $scopeConfig = null,
+                                string            $queryLanguage = null,
+                                int               $nestingDepth = null,
+                                array             $path = [],
+                                string            $defaultHydratorMode = null)
     {
         $this->dataSchemaFactory   = $dataSchemaFactory;
         $this->dataSchemaService   = $dataSchemaService;
@@ -122,6 +129,7 @@ class DataSchema
         $this->objectHydrator      = $objectHydrator;
         $this->nestingDepth        = $nestingDepth;
         $this->defaultHydratorMode = $defaultHydratorMode;
+        $this->queryLanguage       = $queryLanguage;
 
         $this->persister   = $persisterFactory->createPersister($configuration['db_driver'], $this);
         $this->scopeConfig = $scopeConfig;
@@ -133,10 +141,16 @@ class DataSchema
         $this->dataSchemaService->stopStopwatch('filter');
         $this->dataSchemaService->startStopwatch('prepareConfiguration');
 
-        $childPropertyPath = $propertyPath . ' > ' . $configuration['schema'];
+        $isRoot = empty($path);
+        $path[] = ['type' => 'schema', 'name' => $configuration['schema']];
 
         $this->configuration =
-            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth, $childPropertyPath);
+            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth, $path);
+
+        if ($isRoot) {
+            $this->configuration = $this->dataSchemaService->reconfigureByExtensions($this->configuration, $this->configuration, $scopeConfig, $queryLanguage);
+        }
+
         $this->dataSchemaService->stopStopwatch('prepareConfiguration');
 
     }
@@ -178,19 +192,19 @@ class DataSchema
      * @param string|null $class
      * @param array|null $scopeConfig
      * @param int $nestingDepth
-     * @param string $propertyPath
+     * @param array $path
      * @return array
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
-    protected function prepareConfiguration(array $configuration,
+    protected function prepareConfiguration(array   $configuration,
                                             ?string $class,
-                                            array $scopeConfig = null,
-                                            int $nestingDepth = 0,
-                                            string $propertyPath = ''): array
+                                            array   $scopeConfig = null,
+                                            int     $nestingDepth = 0,
+                                            array   $path = []): array
     {
         if ($nestingDepth < 0) {
-            throw new InvalidConfigurationException($configuration, "Maximum nesting depth exceeded $propertyPath");
+            throw new InvalidConfigurationException($configuration, "Maximum nesting depth exceeded {$this->pathToString($path)}");
         }
 
         $class = $class ?? $configuration['class'] ?? null;
@@ -232,13 +246,14 @@ class DataSchema
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? null;
             $schema              = $propertyConfig['schema'] ?? null;
             $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $propertyPath        = \array_merge($path, [['type' => 'property', 'name' => $propertyName]]);
 
             if ($schema) {
                 $propertyConfig = $this->getNestedDataSchemaConfiguration(
                     $schema,
                     $propertyConfig,
                     $nestingDepth - 1,
-                    $propertyPath . ' > ' .  $propertyName,
+                    $propertyPath,
                     $propertyScopeConfig
                 );
             }
@@ -273,7 +288,7 @@ class DataSchema
                     $propertyClass,
                     $propertyScopeConfig,
                     $nestingDepth - 1,
-                    $propertyPath . ' > ' .  $propertyName
+                    $propertyPath
                 );
 
                 if ($propertyConfig && $propertyOwnerClassMetadata instanceof ClassMetadata
@@ -310,25 +325,6 @@ class DataSchema
     public function addPropertyFromSelect(string $name, string $source): void
     {
         $this->configuration['properties'][$name] = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['source' => $source]);
-    }
-
-    /**
-     * @param mixed          $value
-     * @param string         $decodeString
-     * @param TransformEvent $transformEvent
-     * @return mixed
-     * @throws DataTransformerNotExists
-     */
-    protected function decode($value, string $decodeString, TransformEvent $transformEvent)
-    {
-        $dataTransformerNames = $this->dataSchemaService->parseDecodeString($decodeString);
-
-        foreach ($dataTransformerNames as $dataTransformerName) {
-            $transformer = $this->dataSchemaService->getDataTransformer($dataTransformerName);
-            $value       = $transformer->transform($value, $transformEvent);
-        }
-
-        return $value;
     }
 
     /**
@@ -547,7 +543,7 @@ class DataSchema
                     $value = $data;
                 }
 
-                $value = $this->decode($value, $decode, $transformEvent);
+                $value = $this->dataSchemaService->decode($value, $decode, $transformEvent);
 
                 if (is_array($value) && $propertyScopeConfig) {
                     $value = $this->getScopedData(
@@ -961,24 +957,24 @@ class DataSchema
      * @param string $dataSchemaFile
      * @param array $configuration
      * @param int $nestingDepth
-     * @param string $propertyPath
+     * @param array $path
      * @param array|null $scopeConfig
      * @return array
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
     private function getNestedDataSchemaConfiguration(string $dataSchemaFile,
-                                                      array $configuration,
-                                                      int $nestingDepth,
-                                                      string $propertyPath,
-                                                      array $scopeConfig = null): array
+                                                      array  $configuration,
+                                                      int    $nestingDepth,
+                                                      array  $path,
+                                                      array  $scopeConfig = null): array
     {
 
         $dataSchema = $this->dataSchemaFactory->createNestedDataSchema(
             $dataSchemaFile,
             $configuration,
             $nestingDepth,
-            $propertyPath,
+            $path,
             $scopeConfig
         );
 
@@ -1035,5 +1031,22 @@ class DataSchema
         }
 
         return $class;
+    }
+
+    /**
+     * @param array $path
+     * @return string
+     */
+    private function pathToString(array $path): string
+    {
+        $result = '';
+
+        foreach ($path as $i => $item) {
+            $prefix = $i === 0 ? '' : ($item['type'] === 'property' ? '::' : ' > ');
+
+            $result .= "$prefix{$item['name']}";
+        }
+
+        return $result;
     }
 }

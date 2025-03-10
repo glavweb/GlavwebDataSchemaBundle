@@ -11,6 +11,7 @@
 
 namespace Glavweb\DataSchemaBundle\Extension;
 
+use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerInterface;
 
 /**
@@ -25,4 +26,9 @@ interface ExtensionInterface
      * @return DataTransformerInterface[]
      */
     public function getDataTransformers();
+
+    /**
+     * @return ConfigTransformerInterface[]
+     */
+    public function getConfigTransformers();
 }
