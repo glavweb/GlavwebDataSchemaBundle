@@ -61,7 +61,10 @@ class Placeholder
     public function condition($condition, $alias, UserInterface $user = null)
     {
         if (!$user) {
-            $user = $this->tokenStorage->getToken()->getUser();
+            $token = $this->tokenStorage->getToken();
+            if ($token) {
+                $user = $token->getUser();
+            }
         }
 
         $userId = null;
