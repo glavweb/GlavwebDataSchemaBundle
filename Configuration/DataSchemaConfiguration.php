@@ -176,9 +176,9 @@ class DataSchemaConfiguration implements ConfigurationInterface
 
     public function addConditionsNode()
     {
-        $treeBuilder = new TreeBuilder();
+        $treeBuilder = new TreeBuilder('conditions');
 
-        return $treeBuilder->root('conditions')
+        return $treeBuilder->getRootNode()
             ->defaultValue(self::PROPERTIES_DEFAULT_VALUES['conditions'])
             ->useAttributeAsKey('name')
             ->arrayPrototype()
