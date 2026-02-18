@@ -757,6 +757,22 @@ class DataSchema
     }
 
     /**
+     * @param array|array[] $configuration
+     */
+    public function setConfiguration(array $configuration): void
+    {
+        $this->configuration = $configuration;
+    }
+
+    /**
+     * @param array|null $scopeConfig
+     */
+    public function setScopeConfig(?array $scopeConfig): void
+    {
+        $this->scopeConfig = $scopeConfig;
+    }
+
+    /**
      * @param array|null $config
      * @return array
      */
