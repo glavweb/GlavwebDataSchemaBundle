@@ -804,6 +804,26 @@ class DataSchema
     }
 
     /**
+     * @param string $propertyName
+     * @return array|null
+     */
+    public function getPropertyScopeConfiguration(string $propertyName): ?array
+    {
+        $propertyScopeConfig = $this->scopeConfig;
+
+        $propertyNameParts = explode('.', $propertyName);
+        foreach ($propertyNameParts as $propertyNamePart) {
+            if (!isset($propertyScopeConfig[$propertyNamePart])) {
+                return null;
+            }
+
+            $propertyScopeConfig = $propertyScopeConfig[$propertyNamePart];
+        }
+
+        return $propertyScopeConfig;
+    }
+
+    /**
      * @param callable $modify
      * @return array
      */
