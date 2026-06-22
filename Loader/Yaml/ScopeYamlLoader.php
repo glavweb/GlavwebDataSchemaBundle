@@ -11,112 +11,104 @@
 
 namespace Glavweb\DataSchemaBundle\Loader\Yaml;
 
+use Symfony\Component\Config\Exception\FileLoaderImportCircularReferenceException;
+use Symfony\Component\Config\Exception\FileLoaderLoadException;
 use Symfony\Component\Config\Loader\FileLoader;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Class ScopeYamlLoader
+ * Class ScopeYamlLoader.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class ScopeYamlLoader extends FileLoader
 {
     /**
-     * @var array
+     * @var mixed[]
      */
-    private $configuration = [];
+    private array $configuration = [];
 
-    /**
-     * @param mixed $resource
-     * @param null $type
-     */
-    public function load($resource, $type = null)
+    public function load(mixed $resource, $type = null): ?array
     {
         $path = $this->locator->locate($resource);
         $content = $this->loadFile($path);
 
         // empty file
         if (!$content) {
-            return;
+            return null;
         }
 
         // imports
         $this->parseImports($content, $path);
 
         $this->loadConfiguration($content);
-    }
 
-    /**
-     * @param mixed $resource
-     * @param null $type
-     * @return bool
-     */
-    public function supports($resource, $type = null)
-    {
-        return is_string($resource) && pathinfo($resource, PATHINFO_EXTENSION) == 'yml';
-    }
-
-    /**
-     * @return array
-     */
-    public function getConfiguration()
-    {
         return $this->configuration;
     }
 
     /**
      * @param string $file
-     * @return mixed
      */
-    private function loadFile($file)
+    private function loadFile(string|array $file): mixed
     {
         return Yaml::parse(file_get_contents($file));
     }
 
     /**
-     * @param $content
-     * @param $file
+     * @param array<string, mixed> $content
+     *
      * @throws \Exception
-     * @throws \Symfony\Component\Config\Exception\FileLoaderImportCircularReferenceException
-     * @throws \Symfony\Component\Config\Exception\FileLoaderLoadException
+     * @throws FileLoaderImportCircularReferenceException
+     * @throws FileLoaderLoadException
      */
-    private function parseImports($content, $file)
+    private function parseImports(array $content, string|array $file): void
     {
         if (!isset($content['imports'])) {
             return;
         }
 
-        if (!is_array($content['imports'])) {
-            throw new \InvalidArgumentException(sprintf('The "imports" key should contain an array in %s. Check your YAML syntax.', $file));
+        if (!\is_array($content['imports'])) {
+            $message = \sprintf('The "imports" key should contain an array in %s. Check your YAML syntax.', $file);
+            throw new \InvalidArgumentException($message);
         }
 
-        $defaultDirectory = dirname($file);
+        $defaultDirectory = \dirname($file);
         foreach ($content['imports'] as $import) {
-            if (!is_array($import)) {
-                throw new \InvalidArgumentException(sprintf('The values in the "imports" key should be arrays in %s. Check your YAML syntax.', $file));
+            if (!\is_array($import)) {
+                $message = \sprintf('The values in the "imports" key should be arrays in %s. Check your YAML syntax.', $file);
+                throw new \InvalidArgumentException($message);
             }
 
             $this->setCurrentDir($defaultDirectory);
-            $this->import($import['resource'], null, isset($import['ignore_errors']) ? (bool) $import['ignore_errors'] : false, $file);
+            $this->import($import['resource'], null, isset($import['ignore_errors']) && (bool) $import['ignore_errors'], $file);
         }
     }
 
-    /**
-     * @param array $content
-     */
-    private function loadConfiguration(array $content)
+    private function loadConfiguration(array $content): void
     {
         foreach ($content as $namespace => $values) {
             if ($namespace === 'imports') {
                 continue;
             }
 
-            if (!is_array($values)) {
-                $values = array();
+            if (!\is_array($values)) {
+                $values = [];
             }
 
             $this->configuration = array_merge_recursive($this->configuration, $values);
         }
+    }
+
+    public function supports(mixed $resource, $type = null): bool
+    {
+        return \is_string($resource) && preg_match('/^ya?ml$/', pathinfo($resource, \PATHINFO_EXTENSION));
+    }
+
+    /**
+     * @return mixed[]
+     */
+    public function getConfiguration(): array
+    {
+        return $this->configuration;
     }
 }

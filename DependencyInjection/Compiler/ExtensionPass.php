@@ -16,16 +16,13 @@ use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
- * Class ExtensionPass
+ * Class ExtensionPass.
  *
  * @author Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
 class ExtensionPass implements CompilerPassInterface
 {
-    /**
-     * @param ContainerBuilder $container
-     */
-    public function process(ContainerBuilder $container)
+    public function process(ContainerBuilder $container): void
     {
         $container->registerForAutoconfiguration(ExtensionInterface::class)
             ->addTag('glavweb_data_schema.extension');

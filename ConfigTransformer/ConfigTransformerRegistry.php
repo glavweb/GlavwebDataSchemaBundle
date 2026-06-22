@@ -14,7 +14,7 @@ namespace Glavweb\DataSchemaBundle\ConfigTransformer;
 use Glavweb\DataSchemaBundle\Extension\ExtensionInterface;
 
 /**
- * Class ConfigTransformerRegistry
+ * Class ConfigTransformerRegistry.
  *
  * @author Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
@@ -23,19 +23,18 @@ class ConfigTransformerRegistry
     /**
      * @var (int|ConfigTransformerInterface)[]
      */
-    private $registry = [];
+    private array $registry = [];
 
     /**
      * @var ConfigTransformerInterface[]
      */
-    private $sortedTransformers;
+    private ?array $sortedTransformers = null;
 
     /**
-     * @param ConfigTransformerInterface $configTransformer
      * @param string $name
-     * @param int $priority
+     * @param int    $priority
      */
-    public function add(ConfigTransformerInterface $configTransformer, $name, $priority = 0)
+    public function add(ConfigTransformerInterface $configTransformer, $name, $priority = 0): void
     {
         $this->registry[$name] = [$priority, $configTransformer];
         $this->sortedTransformers = null;
@@ -43,6 +42,7 @@ class ConfigTransformerRegistry
 
     /**
      * @param string $name
+     *
      * @return ConfigTransformerInterface
      */
     public function get($name)
@@ -53,17 +53,14 @@ class ConfigTransformerRegistry
     /**
      * @return ConfigTransformerInterface[]
      */
-    public function getAll()
+    public function getAll(): array
     {
         if ($this->sortedTransformers !== null) {
             return $this->sortedTransformers;
         }
 
-        $result = \array_values($this->registry);
-        \usort($result, function ($a, $b) {
-            return $a[0] <=> $b[0];
-        });
-
+        $result = array_values($this->registry);
+        usort($result, static fn (array $a, array $b): int => $a[0] <=> $b[0]);
 
         $this->sortedTransformers = array_column($result, 1);
 
@@ -72,17 +69,13 @@ class ConfigTransformerRegistry
 
     /**
      * @param string $name
-     * @return bool
      */
-    public function has($name)
+    public function has($name): bool
     {
         return isset($this->registry[$name]);
     }
 
-    /**
-     * @param ExtensionInterface $extension
-     */
-    public function loadExtension(ExtensionInterface $extension)
+    public function loadExtension(ExtensionInterface $extension): void
     {
         $configTransformers = $extension->getConfigTransformers();
         foreach ($configTransformers as $name => $transformer) {

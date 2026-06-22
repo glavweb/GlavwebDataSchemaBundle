@@ -21,78 +21,34 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\Stopwatch\Stopwatch;
 
 /**
- * Class DataSchemaService
- *
- * @package Glavweb\DataSchemaBundle\Service
+ * Class DataSchemaService.
  *
  * @author  Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
 class DataSchemaService
 {
+    private readonly FileLocator $scopeFileLocator;
 
-    /**
-     * @var Registry
-     */
-    private $doctrine;
+    private readonly FileLocator $dataSchemaFileLocator;
 
-    /**
-     * @var int
-     */
-    private $nestingDepth;
-
-    /**
-     * @var DataTransformerRegistry
-     */
-    private $dataTransformerRegistry;
-
-    /**
-     * @var ConfigTransformerRegistry
-     */
-    private $configTransformerRegistry;
-
-    /**
-     * @var FileLocator
-     */
-    private $scopeFileLocator;
-
-    /**
-     * @var FileLocator
-     */
-    private $dataSchemaFileLocator;
-
-    /**
-     * @var array
-     */
-    private $dataSchemaConfigCache = [];
-
-    /**
-     * @var Stopwatch|null
-     */
-    private $stopwatch;
+    private array $dataSchemaConfigCache = [];
 
     /**
      * DataSchemaService constructor.
      */
-    public function __construct(Registry $doctrine,
-                                DataTransformerRegistry $dataTransformerRegistry,
-                                ConfigTransformerRegistry $configTransformerRegistry,
-                                string $dataSchemaDir,
-                                string $scopeDir,
-                                int $nestingDepth,
-                                ?Stopwatch $stopwatch)
+    public function __construct(private readonly Registry $doctrine,
+        private readonly DataTransformerRegistry $dataTransformerRegistry,
+        private readonly ConfigTransformerRegistry $configTransformerRegistry,
+        string $dataSchemaDir,
+        string $scopeDir,
+        private readonly int $nestingDepth,
+        private readonly ?Stopwatch $stopwatch)
     {
-        $this->doctrine                = $doctrine;
-        $this->dataTransformerRegistry = $dataTransformerRegistry;
-        $this->configTransformerRegistry = $configTransformerRegistry;
-        $this->nestingDepth            = $nestingDepth;
-        $this->dataSchemaFileLocator   = new FileLocator($dataSchemaDir);
-        $this->scopeFileLocator        = new FileLocator($scopeDir);
-        $this->stopwatch               = $stopwatch;
+        $this->dataSchemaFileLocator = new FileLocator($dataSchemaDir);
+        $this->scopeFileLocator = new FileLocator($scopeDir);
     }
 
     /**
-     * @param array $configuration
-     * @return array
      * @throws InvalidConfigurationException
      */
     public function processSchemaConfiguration(array $configuration): array
@@ -107,14 +63,10 @@ class DataSchemaService
                 [$configuration]
             );
         } catch (\Exception $e) {
-            throw new InvalidConfigurationException($configuration, $e->getMessage());
+            throw new InvalidConfigurationException($configuration, $e->getMessage(), $e, $e);
         }
     }
 
-    /**
-     * @param string $dataSchemaFile
-     * @return array
-     */
     public function loadSchemaConfigurationFromFile(string $dataSchemaFile): array
     {
         $dataSchemaLoader = new DataSchemaYamlLoader($this->dataSchemaFileLocator);
@@ -123,10 +75,6 @@ class DataSchemaService
         return $dataSchemaLoader->getConfiguration();
     }
 
-    /**
-     * @param string $scopeFile
-     * @return array
-     */
     public function loadScopeConfiguration(string $scopeFile): array
     {
         $scopeLoader = new ScopeYamlLoader($this->scopeFileLocator);
@@ -136,42 +84,32 @@ class DataSchemaService
     }
 
     /**
-     * @param string $decodeString
      * @return array dataTransformerNames
      */
     public function parseDecodeString(string $decodeString): array
     {
         $dataTransformerNames = explode('|', $decodeString);
 
-        return array_map('trim', $dataTransformerNames);
+        return array_map(trim(...), $dataTransformerNames);
     }
 
-    /**
-     * @param string $name
-     */
     public function startStopwatch(string $name): void
     {
-        if ($this->stopwatch) {
+        if ($this->stopwatch instanceof Stopwatch) {
             $this->stopwatch->start($name, 'GlavwebDataSchemaBundle');
         }
     }
 
-    /**
-     * @param string $name
-     */
     public function stopStopwatch(string $name): void
     {
-        if ($this->stopwatch) {
+        if ($this->stopwatch instanceof Stopwatch) {
             $this->stopwatch->stop($name);
         }
     }
 
-    /**
-     * @param string $name
-     */
     public function lapStopwatch(string $name): void
     {
-        if ($this->stopwatch) {
+        if ($this->stopwatch instanceof Stopwatch) {
             $this->stopwatch->lap($name);
         }
     }
@@ -180,7 +118,7 @@ class DataSchemaService
     {
         try {
             $this->dataSchemaFileLocator->locate($dataSchemaFile);
-        } catch (FileLocatorFileNotFoundException $e) {
+        } catch (FileLocatorFileNotFoundException) {
             return false;
         }
 
@@ -188,8 +126,6 @@ class DataSchemaService
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @return array
      * @throws InvalidConfigurationException
      */
     public function getConfigurationFromFile(string $dataSchemaFile): array
@@ -210,103 +146,98 @@ class DataSchemaService
     }
 
     /**
-     * @param array  $configuration
-     * @param string $propertyName
-     * @return array
+     * @param array<string, mixed> $configuration
+     *
      * @throws InvalidConfigurationException
      */
     public function getPropertySourcesStack(array $configuration, string $propertyName): array
     {
-        $depth           = 0;
+        $depth = 0;
         $propertiesStack = [];
-        $selects         = $configuration['query']['selects'] ?? [];
-        $propertyConfig  = $configuration['properties'][$propertyName] ?? null;
+        $selects = $configuration['query']['selects'] ?? [];
+        $propertyConfig = $configuration['properties'][$propertyName] ?? null;
 
         try {
             while ($currentPropertyName = $propertyConfig['source'] ?? null) {
-                if ($currentPropertyName === DataSchemaConfiguration::SOURCE_SELF_TOKEN || array_key_exists($currentPropertyName, $selects)) {
+                if ($currentPropertyName === DataSchemaConfiguration::SOURCE_SELF_TOKEN || \array_key_exists(
+                    $currentPropertyName,
+                    $selects
+                )) {
                     break;
                 }
 
                 if ($currentPropertyName === $propertyName) {
-                    throw new InvalidConfigurationPropertyException(
-                        $propertyName, "Shouldn't refer to self in \"source\" option"
-                    );
+                    throw new InvalidConfigurationPropertyException($propertyName, "Shouldn't refer to self in \"source\" option");
                 }
 
                 $propertyConfig = $configuration['properties'][$currentPropertyName] ?? null;
 
                 if (!$propertyConfig) {
-                    throw new InvalidConfigurationPropertyException(
-                        $propertyName, "Invalid \"source\" option. Referred property \"$currentPropertyName\" doesn't exist in configuration."
-                    );
+                    $message = "Invalid \"source\" option. Referred property \"{$currentPropertyName}\" doesn't exist in configuration.";
+                    throw new InvalidConfigurationPropertyException($propertyName, $message);
                 }
 
                 if ($this->isNestedProperty($propertyConfig)) {
-                    throw new InvalidConfigurationPropertyException(
-                        $propertyName, "Invalid \"source\" option. Referred property \"$currentPropertyName\" should have scalar type."
-                    );
+                    $message = "Invalid \"source\" option. Referred property \"{$currentPropertyName}\" should have scalar type.";
+                    throw new InvalidConfigurationPropertyException($propertyName, $message);
                 }
 
                 $propertiesStack[] = [$currentPropertyName, $propertyConfig];
 
                 if (++$depth > 10) {
-                    throw new InvalidConfigurationPropertyException(
-                        $propertyName, "Maximum referencing depth exceeded"
-                    );
+                    throw new InvalidConfigurationPropertyException($propertyName, 'Maximum referencing depth exceeded');
                 }
-
             }
         } catch (InvalidConfigurationPropertyException $e) {
-            $propertiesStackString = 'Sources stack: ' . implode(
-                    ' > ',
-                    [$propertyName] + array_column($propertiesStack, 0)
-                );
+            $propertiesStackString = 'Sources stack: '.implode(
+                ' > ',
+                [$propertyName] + array_column($propertiesStack, 0)
+            );
 
-            throw new InvalidConfigurationException($configuration, $propertiesStackString . '. ' . $e->getMessage());
+            throw new InvalidConfigurationException($configuration, $propertiesStackString.'. '.$e->getMessage(), $e, $e);
         }
 
         return $propertiesStack;
     }
 
     /**
-     * @param array      $entityConfig
-     * @param array|null $scopeConfig
-     * @return array
+     * @param array<string, mixed> $entityConfig
+     *
      * @throws InvalidConfigurationException
      */
-    public function getDatabaseFields(array $entityConfig, array $scopeConfig = null): array
+    public function getDatabaseFields(array $entityConfig, ?array $scopeConfig = null): array
     {
-        $properties       = $entityConfig['properties'];
-        $entityClass      = $entityConfig['class'];
+        $properties = $entityConfig['properties'];
+        $entityClass = $entityConfig['class'];
         $discriminatorMap = $entityConfig['discriminatorMap'] ?? null;
-        $databaseFields   = [];
+        $databaseFields = [];
 
         foreach ($properties as $propertyName => $propertyConfig) {
             if (isset($propertyConfig['discriminator']) && $discriminatorMap
                 && $discriminatorMap[$propertyConfig['discriminator']] !== $entityClass) {
                 continue;
             }
-            if (!$propertyConfig['hidden'] && $scopeConfig && !array_key_exists($propertyName, $scopeConfig)) {
+
+            if (!$propertyConfig['hidden'] && $scopeConfig && !\array_key_exists($propertyName, $scopeConfig)) {
                 continue;
             }
 
             $propertySourcesStack = $this->getPropertySourcesStack($entityConfig, $propertyName);
 
-            $isVirtualProperty = !empty($propertySourcesStack);
+            $isVirtualProperty = $propertySourcesStack !== [];
 
             if ($isVirtualProperty) {
                 foreach ($propertySourcesStack as [$sourcePropertyName, $sourcePropertyData]) {
                     $isValid = $sourcePropertyData['from_db'] ?? false;
 
-                    if ($isValid && !in_array($sourcePropertyName, $databaseFields, true)) {
+                    if ($isValid && !\in_array($sourcePropertyName, $databaseFields, true)) {
                         $databaseFields[] = $sourcePropertyName;
                     }
                 }
             } else {
                 $isValid = $propertyConfig['from_db'] ?? false;
 
-                if ($isValid && !in_array($propertyName, $databaseFields, true)) {
+                if ($isValid && !\in_array($propertyName, $databaseFields, true)) {
                     $databaseFields[] = $propertyName;
                 }
             }
@@ -316,44 +247,34 @@ class DataSchemaService
     }
 
     /**
-     * @param array $propertyConfiguration
-     * @return bool
+     * @param array<string, mixed> $propertyConfiguration
      */
     public function isNestedProperty(array $propertyConfiguration): bool
     {
-        $schema     = $propertyConfiguration['schema'] ?? null;
-        $class      = $propertyConfiguration['class'] ?? null;
+        $schema = $propertyConfiguration['schema'] ?? null;
+        $class = $propertyConfiguration['class'] ?? null;
         $properties = $propertyConfiguration['properties'] ?? [];
 
         return $schema || $class || $properties;
     }
 
-    /**
-     * @param string $class
-     * @return ClassMetadata
-     */
     public function getClassMetadata(string $class): ClassMetadata
     {
         return $this->doctrine->getManager()->getClassMetadata($class);
     }
 
-    /**
-     * @param string $class
-     * @param string $propertyName
-     * @return bool
-     */
     public function hasPropertyInSubclasses(string $class, string $propertyName): bool
     {
-        $superClassMetadata   = $this->getClassMetadata($class);
+        $superClassMetadata = $this->getClassMetadata($class);
 
         foreach ($superClassMetadata->subClasses as $subClass) {
             $subClassMetadata = $this->getClassMetadata($subClass);
 
-            if (in_array($propertyName, $subClassMetadata->getFieldNames(), true)) {
+            if (\in_array($propertyName, $subClassMetadata->getFieldNames(), true)) {
                 return true;
             }
 
-            if (in_array($propertyName, $subClassMetadata->getAssociationNames(), true)) {
+            if (\in_array($propertyName, $subClassMetadata->getAssociationNames(), true)) {
                 return true;
             }
         }
@@ -374,10 +295,6 @@ class DataSchemaService
     }
 
     /**
-     * @param mixed $value
-     * @param string $decodeString
-     * @param TransformEvent $transformEvent
-     * @return mixed
      * @throws DataTransformerNotExists
      */
     public function decode($value, string $decodeString, TransformEvent $transformEvent)
@@ -393,24 +310,21 @@ class DataSchemaService
     }
 
     /**
-     * @param array $config
-     * @param array $rootConfig
-     * @param array|null $scopeConfig
-     * @param string|null $queryLanguage
-     * @param array $path
+     * @param array<string, mixed> $config
+     *
      * @return array []
      */
-    public function reconfigureByExtensions(array  $config,
-                                            array  $rootConfig,
-                                            array  $scopeConfig = null,
-                                            string $queryLanguage = null,
-                                            array  $path = []): array
+    public function reconfigureByExtensions(array $config,
+        array $rootConfig,
+        ?array $scopeConfig = null,
+        ?string $queryLanguage = null,
+        array $path = []): array
     {
         $properties = $config['properties'] ?? [];
 
         foreach ($properties as $propertyName => $propertyConfig) {
             if ($this->isNestedProperty($propertyConfig)) {
-                $propertyPath = \array_merge($path, [$propertyName]);
+                $propertyPath = array_merge($path, [$propertyName]);
                 $config['properties'][$propertyName] = $this->reconfigureByExtensions(
                     $propertyConfig, $rootConfig, $scopeConfig, $queryLanguage, $propertyPath
                 );

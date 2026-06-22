@@ -12,25 +12,18 @@
 namespace Glavweb\DataSchemaBundle\Extension;
 
 /**
- * Class AbstractExtension
+ * Class AbstractExtension.
  *
  * @author Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
 class AbstractExtension implements ExtensionInterface
 {
-
-    /**
-     * @inheritDoc
-     */
-    public function getDataTransformers()
+    public function getDataTransformers(): array
     {
         return [];
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getConfigTransformers()
+    public function getConfigTransformers(): array
     {
         return [];
     }

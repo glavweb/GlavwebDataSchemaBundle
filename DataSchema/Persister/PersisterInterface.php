@@ -11,67 +11,39 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 
-use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 
 /**
- * Class PersisterInterface
+ * Class PersisterInterface.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 interface PersisterInterface
 {
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
      * @return array
      */
     public function getManyToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
      * @return array
      */
     public function getOneToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
      * @return array
      */
     public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
      * @return array
      */
     public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
 
-    /**
-     * @param string $class
-     * @param array  $properties
-     * @param int    $id
-     * @return array
-     */
     public function getPropertiesData(string $class, array $properties, int $id): array;
 
     /**
-     * @param string $class
-     * @param string  $selectClause
-     * @param int    $id
-     * @return
      * @throws NonUniqueResultException
      * @throws NoResultException
      */

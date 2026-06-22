@@ -14,24 +14,21 @@ namespace Glavweb\DataSchemaBundle\Hydrator\Doctrine;
 use Doctrine\ORM\Internal\Hydration\ArrayHydrator;
 
 /**
- * Class DatagridHydrator
+ * Class DatagridHydrator.
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class DatagridHydrator extends ArrayHydrator
 {
-    /**
-     * @return array
-     */
-    protected function hydrateAllData()
+    #[\Override]
+    protected function hydrateAllData(): array
     {
         $result = parent::hydrateAllData();
 
-        if (isset($result[0]) && is_array($result[0]) && isset($result[0][0])) {
+        if (isset($result[0]) && \is_array($result[0]) && isset($result[0][0])) {
             $mergedResult = [];
 
-            foreach($result as $row) {
+            foreach ($result as $row) {
                 $entityData = $row[0];
                 unset($row[0]);
 

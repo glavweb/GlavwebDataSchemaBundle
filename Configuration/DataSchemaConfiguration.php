@@ -2,59 +2,49 @@
 
 namespace Glavweb\DataSchemaBundle\Configuration;
 
+use Symfony\Component\Config\Definition\Builder\NodeParentInterface;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 class DataSchemaConfiguration implements ConfigurationInterface
 {
     public const PROPERTIES_DEFAULT_VALUES = [
-        'schema'                        => null,
-        'class'                         => null,
-        'description'                   => null,
-        'discriminator'                 => null,
+        'schema' => null,
+        'class' => null,
+        'description' => null,
+        'discriminator' => null,
         'ignore_discriminator_mismatch' => false,
-        'filter_null_values'            => true,
-        'join'                          => 'none',
-        'type'                          => null,
-        'source'                        => null,
-        'decode'                        => null,
-        'hidden'                        => false,
-        'conditions'                    => [],
-        'orderBy'                       => [],
-        'roles'                         => [],
-        'hasSubclasses'                 => false,
-        'discriminatorColumnName'       => null,
-        'discriminatorMap'              => [],
-        'tableName'                     => null
+        'filter_null_values' => true,
+        'join' => 'none',
+        'type' => null,
+        'source' => null,
+        'decode' => null,
+        'hidden' => false,
+        'conditions' => [],
+        'orderBy' => [],
+        'roles' => [],
+        'hasSubclasses' => false,
+        'discriminatorColumnName' => null,
+        'discriminatorMap' => [],
+        'tableName' => null,
     ];
 
     public const CONDITIONS_DEFAULT_VALUES = [
-        'enabled'                       => true,
-        'name'                          => null,
-        'condition'                     => null
+        'enabled' => true,
+        'name' => null,
+        'condition' => null,
     ];
 
     public const SOURCE_SELF_TOKEN = '$';
 
     /**
-     * @var int
-     */
-    private $nestingDepth;
-
-    /**
      * DataSchemaConfiguration constructor.
-     *
-     * @param int $nestingDepth
      */
-    public function __construct(int $nestingDepth = 0)
+    public function __construct(private readonly int $nestingDepth = 0)
     {
-        $this->nestingDepth = $nestingDepth;
     }
 
-    /**
-     * @inheritDoc
-     */
-    public function getConfigTreeBuilder()
+    public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('schema');
 
@@ -92,7 +82,6 @@ class DataSchemaConfiguration implements ConfigurationInterface
                 ->append($this->addPropertiesNode($this->nestingDepth))
             ->end()
         ;
-
 
         return $treeBuilder;
     }
@@ -151,18 +140,19 @@ class DataSchemaConfiguration implements ConfigurationInterface
                         ->variablePrototype()
                         ->end()
                         ->validate()
-                            ->always(static function ($value) {
-                                if (is_array($value)) {
+                            ->always(static function ($value): ?array {
+                                if (\is_array($value)) {
                                     foreach ($value as $k => $v) {
-                                        if (!in_array(strtolower($v), ['asc', 'desc'])) {
-                                            throw new \InvalidArgumentException("The value \"{$v}\" for key \"$k\" is not a valid order by.");
+                                        if (!\in_array(strtolower($v), ['asc', 'desc'], true)) {
+                                            $message = "The value \"{$v}\" for key \"{$k}\" is not a valid order by.";
+                                            throw new \InvalidArgumentException($message);
                                         }
                                     }
 
                                     return $value;
-                                } else {
-                                    return null;
                                 }
+
+                                return null;
                             })
                         ->end()
                     ->end()
@@ -174,7 +164,7 @@ class DataSchemaConfiguration implements ConfigurationInterface
         return $rootNode;
     }
 
-    public function addConditionsNode()
+    public function addConditionsNode(): ?NodeParentInterface
     {
         $treeBuilder = new TreeBuilder('conditions');
 
@@ -185,7 +175,7 @@ class DataSchemaConfiguration implements ConfigurationInterface
                 ->canBeDisabled()
                 ->beforeNormalization()
                     ->ifString()
-                    ->then(function ($v) { return ['condition' => $v]; })
+                    ->then(static fn ($v): array => ['condition' => $v])
                 ->end()
                 ->children()
                     ->scalarNode('name')->end()

@@ -15,21 +15,17 @@ use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 /**
- * Class Configuration
+ * Class Configuration.
  *
  * This is the class that validates and merges configuration from your app/config files
  *
  * To learn more see {@link http://symfony.com/doc/current/cookbook/bundles/extension.html#cookbook-bundles-extension-config-class}
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class Configuration implements ConfigurationInterface
 {
-    /**
-     * {@inheritdoc}
-     */
-    public function getConfigTreeBuilder()
+    public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder('glavweb_data_schema');
         $rootNode = $treeBuilder->getRootNode();
@@ -38,14 +34,16 @@ class Configuration implements ConfigurationInterface
             ->children()
                 ->scalarNode('default_hydrator_mode')->cannotBeEmpty()->end()
                 ->arrayNode('data_schema')
+                    ->addDefaultsIfNotSet()
                     ->children()
-                        ->scalarNode('dir')->end()
+                        ->scalarNode('dir')->defaultValue('%kernel.project_dir%/data_schemas')->end()
                         ->integerNode('max_nesting_depth')->defaultValue(10)->min(1)->end()
                     ->end()
                 ->end()
                 ->arrayNode('scope')
+                    ->addDefaultsIfNotSet()
                     ->children()
-                        ->scalarNode('dir')->end()
+                        ->scalarNode('dir')->defaultValue('%kernel.project_dir%/scopes')->end()
                     ->end()
                 ->end()
             ->end()

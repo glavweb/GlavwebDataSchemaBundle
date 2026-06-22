@@ -11,19 +11,12 @@
 
 namespace Glavweb\DataSchemaBundle\ConfigTransformer;
 
-use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformEvent;
-
 /**
- * Interface ConfigTransformerInterface
+ * Interface ConfigTransformerInterface.
  *
  * @author Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
 interface ConfigTransformerInterface
 {
-    /**
-     * @param array $config
-     * @param ConfigTransformEvent $transformEvent
-     * @return array
-     */
     public function transform(array $config, ConfigTransformEvent $transformEvent): array;
 }

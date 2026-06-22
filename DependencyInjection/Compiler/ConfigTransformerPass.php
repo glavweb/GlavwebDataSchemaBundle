@@ -11,10 +11,9 @@
 
 namespace Glavweb\DataSchemaBundle\DependencyInjection\Compiler;
 
-use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerInterface;
-use Symfony\Component\DependencyInjection\Reference;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Reference;
 
 /**
  * Adds tagged glavweb_data_schema.config_transformer services to ConfigTransformerRegister service.
@@ -23,10 +22,7 @@ use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
  */
 class ConfigTransformerPass implements CompilerPassInterface
 {
-    /**
-     * @param ContainerBuilder $container
-     */
-    public function process(ContainerBuilder $container)
+    public function process(ContainerBuilder $container): void
     {
         if (!$container->hasDefinition('glavweb_data_schema.config_transformer_registry')) {
             return;
@@ -39,9 +35,9 @@ class ConfigTransformerPass implements CompilerPassInterface
 
             $transformerRegistryDefinition->addMethodCall('add', [new Reference($id), $name]);
         }
-        
+
         // Extensions
-        foreach ($container->findTaggedServiceIds('glavweb_data_schema.extension') as $id => $tags) {
+        foreach (array_keys($container->findTaggedServiceIds('glavweb_data_schema.extension')) as $id) {
             $transformerRegistryDefinition->addMethodCall('loadExtension', [new Reference($id)]);
         }
     }

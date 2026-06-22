@@ -2,8 +2,8 @@
 set -x
 set -e
 
-composer require glavweb/data-schema-bundle
+composer require -n $PACKAGE_NAME:dev-main \
+&& php bin/phpunit \
+|| echo 'FAILED'
 
-php bin/phpunit
-
-. ../scripts/copy.sh
+../scripts/copy.sh

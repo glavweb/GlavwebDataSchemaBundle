@@ -9,46 +9,32 @@ use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 class DataSchemaFilter
 {
-
-    /**
-     * @var DataSchemaService
-     */
-    private $dataSchemaService;
-
-    /**
-     * @var AuthorizationCheckerInterface
-     */
-    private $authorizationChecker;
-
     /**
      * DataSchemaFilter constructor.
      */
-    public function __construct(DataSchemaService $dataSchemaService,
-                                AuthorizationCheckerInterface $authorizationChecker)
-    {
-        $this->dataSchemaService    = $dataSchemaService;
-        $this->authorizationChecker = $authorizationChecker;
+    public function __construct(
+        private readonly DataSchemaService $dataSchemaService,
+        private readonly AuthorizationCheckerInterface $authorizationChecker,
+    ) {
     }
 
     /**
-     * @param array      $config
-     * @param array|null $scopeConfig
-     * @param int        $nestingDepth
-     * @return array
+     * @param array<string, mixed> $config
+     *
      * @throws InvalidConfigurationException
      */
-    public function filter(array $config, array $scopeConfig = null, int $nestingDepth = 0): array
+    public function filter(array $config, ?array $scopeConfig = null, int $nestingDepth = 0): array
     {
         if (!$this->isGranted($config['roles'] ?? [])) {
             return [];
         }
 
         $configProperties = $config['properties'];
-        $result           = $config + [];
+        $result = $config + [];
 
         if ($configProperties) {
-            $class                = $config['class'] ?? null;
-            $classMetadata        = $class ? $this->dataSchemaService->getClassMetadata($class) : null;
+            $class = $config['class'] ?? null;
+            $classMetadata = $class ? $this->dataSchemaService->getClassMetadata($class) : null;
             $identifierFieldNames =
                 $classMetadata instanceof ClassMetadata ? $classMetadata->getIdentifierFieldNames() : [];
 
@@ -56,12 +42,15 @@ class DataSchemaFilter
 
             foreach ($configProperties as $propertyName => $propertyConfig) {
                 $propertyScopeConfig = $scopeConfig[$propertyName] ?? null;
-                $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
-                $isIdentifier        = in_array($propertyName, $identifierFieldNames, true);
-                $isHidden            = $propertyConfig['hidden'] ?? false;
-                $isInScope           = $scopeConfig && array_key_exists($propertyName, $scopeConfig);
+                $isNested = $this->dataSchemaService->isNestedProperty($propertyConfig);
+                $isIdentifier = \in_array($propertyName, $identifierFieldNames, true);
+                $isHidden = $propertyConfig['hidden'] ?? false;
+                $isInScope = $scopeConfig && \array_key_exists($propertyName, $scopeConfig);
+                if (!$isInScope && !$isHidden && !$isIdentifier) {
+                    continue;
+                }
 
-                if ((!$isInScope && !$isHidden && !$isIdentifier) || (!$isInScope && $isNested && $nestingDepth <= 0)) {
+                if (!$isInScope && $isNested && $nestingDepth <= 0) {
                     continue;
                 }
 
@@ -72,7 +61,7 @@ class DataSchemaFilter
                     foreach ($propertySourcesStack as [$sourcePropertyName, $sourcePropertyConfig]) {
                         if (!isset($properties[$sourcePropertyName]) && $sourcePropertyConfig) {
                             $sourcePropertyScopeConfig = $scopeConfig[$sourcePropertyName] ?? null;
-                            $sourcePropertyConfig      = $this->filterProperty(
+                            $sourcePropertyConfig = $this->filterProperty(
                                 $sourcePropertyConfig,
                                 $sourcePropertyScopeConfig,
                                 $nestingDepth - 1
@@ -102,37 +91,23 @@ class DataSchemaFilter
         return $result;
     }
 
-    /**
-     * @param array $roles
-     * @return bool
-     */
     public function isGranted(array $roles): bool
     {
-        if (empty($roles)) {
+        if ($roles === []) {
             return true;
         }
 
-        foreach ($roles as $role) {
-            if ($this->authorizationChecker->isGranted($role)) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($roles, fn ($role): bool => $this->authorizationChecker->isGranted($role));
     }
 
     /**
-     * @param array      $propertyConfig
-     * @param array|null $scopeConfig
-     * @param int        $nestingDepth
-     * @return array|null
      * @throws InvalidConfigurationException
      */
     private function filterProperty(array $propertyConfig,
-                                    ?array $scopeConfig,
-                                    int $nestingDepth): ?array
+        ?array $scopeConfig,
+        int $nestingDepth): array
     {
-        $isNested                  = $this->dataSchemaService->isNestedProperty($propertyConfig);
+        $isNested = $this->dataSchemaService->isNestedProperty($propertyConfig);
         $sourcePropertyScopeConfig = $scopeConfig ?? null;
 
         if ($isNested) {

@@ -12,17 +12,11 @@
 namespace Glavweb\DataSchemaBundle\DataTransformer;
 
 /**
- * Interface DataTransformerInterface
+ * Interface DataTransformerInterface.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 interface DataTransformerInterface
 {
-    /**
-     * @param mixed          $value
-     * @param TransformEvent $transformEvent
-     * @return mixed
-     */
     public function transform($value, TransformEvent $transformEvent);
 }

@@ -11,56 +11,42 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema;
 
-use Doctrine\Common\Annotations\Reader;
 use Symfony\Bridge\Twig\Extension\SecurityExtension;
-use Symfony\Component\Security\Core\Security;
+use Symfony\Bundle\SecurityBundle\Security;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Twig\Environment;
+use Twig\Error\LoaderError;
+use Twig\Error\SyntaxError;
+use Twig\Loader\ArrayLoader;
 
 /**
- * Class Placeholder
+ * Class Placeholder.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class Placeholder
 {
-    /**
-     * @var Security
-     */
-    private $security;
-
-    /**
-     * @var \Twig_Environment
-     */
-    private $twigEnvironment;
+    private readonly Environment $twigEnvironment;
 
     /**
      * AccessHandler constructor.
-     *
-     * @param Reader $annotationReader
-     * @param Security $security
-     * @param SecurityExtension $securityExtension
      */
-    public function __construct(Reader $annotationReader, Security $security, SecurityExtension $securityExtension)
+    public function __construct(private readonly Security $security, SecurityExtension $securityExtension)
     {
-        $this->security = $security;
-
-        $this->twigEnvironment = new \Twig\Environment(new \Twig\Loader\ArrayLoader([]), [
+        $this->twigEnvironment = new Environment(new ArrayLoader([]), [
             'strict_variables' => true,
-            'autoescape'       => false,
+            'autoescape' => false,
         ]);
         $this->twigEnvironment->addExtension($securityExtension);
     }
 
     /**
-     * @param string $condition
-     * @param string $alias
-     * @param UserInterface $user
-     * @return string
+     * @throws LoaderError
+     * @throws SyntaxError
      */
-    public function condition($condition, $alias, UserInterface $user = null)
+    public function condition(string $condition, string $alias, ?UserInterface $user = null): string
     {
-        if (!$user) {
+        if (!$user instanceof UserInterface) {
             $user = $this->security->getUser();
         }
 
@@ -72,8 +58,8 @@ class Placeholder
         $template = $this->twigEnvironment->createTemplate($condition);
 
         return trim($template->render([
-            'alias'  => $alias,
-            'user'   => $user,
+            'alias' => $alias,
+            'user' => $user,
             'userId' => $userId,
         ]));
     }

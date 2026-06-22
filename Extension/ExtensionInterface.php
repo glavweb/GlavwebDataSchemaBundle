@@ -15,20 +15,19 @@ use Glavweb\DataSchemaBundle\ConfigTransformer\ConfigTransformerInterface;
 use Glavweb\DataSchemaBundle\DataTransformer\DataTransformerInterface;
 
 /**
- * Class ExtensionInterface
+ * Class ExtensionInterface.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 interface ExtensionInterface
 {
     /**
      * @return DataTransformerInterface[]
      */
-    public function getDataTransformers();
+    public function getDataTransformers(): array;
 
     /**
      * @return ConfigTransformerInterface[]
      */
-    public function getConfigTransformers();
+    public function getConfigTransformers(): array;
 }

@@ -14,10 +14,10 @@ namespace Glavweb\DataSchemaBundle\Exception\Persister;
 use Glavweb\DataSchemaBundle\Exception\Exception;
 
 /**
- * Class InvalidQueryException
+ * Class InvalidQueryException.
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class InvalidQueryException extends Exception
-{}
+{
+}

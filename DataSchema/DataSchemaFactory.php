@@ -21,94 +21,32 @@ use Glavweb\DataSchemaBundle\Service\DataSchemaValidator;
 use Glavweb\DataSchemaBundle\Util\Utils;
 
 /**
- * Class DataSchemaFactory
+ * Class DataSchemaFactory.
  *
  * @author  Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class DataSchemaFactory
 {
-
-    /**
-     * @var PersisterFactory
-     */
-    private $persisterFactory;
-
-    /**
-     * @var string
-     */
-    private $defaultHydratorMode;
-
-    /**
-     * @var Placeholder
-     */
-    private $placeholder;
-
-    /**
-     * @var ObjectHydrator
-     */
-    private $objectHydrator;
-
-    /**
-     * @var int
-     */
-    private $nestingDepth;
-
-    /**
-     * @var DataSchemaService
-     */
-    private $dataSchemaService;
-
-    /**
-     * @var DataSchemaFilter
-     */
-    private $dataSchemaFilter;
-
-    /**
-     * @var DataSchemaValidator
-     */
-    private $dataSchemaValidator;
-
     /**
      * DataSchema constructor.
-     *
-     * @param DataSchemaService   $dataSchemaService
-     * @param DataSchemaFilter    $dataSchemaFilter
-     * @param DataSchemaValidator $dataSchemaValidator
-     * @param PersisterFactory    $persisterFactory
-     * @param Placeholder         $placeholder
-     * @param ObjectHydrator      $objectHydrator
-     * @param int                 $nestingDepth
-     * @param string|null         $defaultHydratorMode
      */
-    public function __construct(DataSchemaService $dataSchemaService,
-                                DataSchemaFilter $dataSchemaFilter,
-                                DataSchemaValidator $dataSchemaValidator,
-                                PersisterFactory $persisterFactory,
-                                Placeholder $placeholder,
-                                ObjectHydrator $objectHydrator,
-                                int $nestingDepth,
-                                string $defaultHydratorMode = null)
-    {
-        $this->dataSchemaService   = $dataSchemaService;
-        $this->dataSchemaFilter    = $dataSchemaFilter;
-        $this->dataSchemaValidator = $dataSchemaValidator;
-        $this->persisterFactory    = $persisterFactory;
-        $this->placeholder         = $placeholder;
-        $this->objectHydrator      = $objectHydrator;
-        $this->nestingDepth        = $nestingDepth;
-        $this->defaultHydratorMode = $defaultHydratorMode;
+    public function __construct(
+        private readonly DataSchemaService $dataSchemaService,
+        private readonly DataSchemaFilter $dataSchemaFilter,
+        private readonly DataSchemaValidator $dataSchemaValidator,
+        private readonly PersisterFactory $persisterFactory,
+        private readonly Placeholder $placeholder,
+        private readonly ObjectHydrator $objectHydrator,
+        private readonly int $nestingDepth,
+        private readonly ?string $defaultHydratorMode = null,
+    ) {
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @param string|null $scopeFile
-     * @param string|null $queryLanguage
-     * @return DataSchema
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
-    public function createDataSchema(string $dataSchemaFile, string $scopeFile = null, string $queryLanguage = null): DataSchema
+    public function createDataSchema(string $dataSchemaFile, ?string $scopeFile = null, ?string $queryLanguage = null): DataSchema
     {
         $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 
@@ -136,22 +74,17 @@ class DataSchemaFactory
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @param array $configuration
      * @param int|null $nestingDepth
-     * @param array $path
-     * @param array|null $scopeConfig
-     * @param string|null $queryLanguage
-     * @return DataSchema
+     *
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
     public function createNestedDataSchema(string $dataSchemaFile,
-                                           array  $configuration,
-                                           int    $nestingDepth,
-                                           array  $path,
-                                           array  $scopeConfig = null,
-                                           string $queryLanguage = null): DataSchema
+        array $configuration,
+        int $nestingDepth,
+        array $path,
+        ?array $scopeConfig = null,
+        ?string $queryLanguage = null): DataSchema
     {
         $dataSchemaConfig = $this->dataSchemaService->getConfigurationFromFile($dataSchemaFile);
 

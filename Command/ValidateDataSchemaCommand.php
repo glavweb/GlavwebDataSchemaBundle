@@ -12,57 +12,39 @@ use Symfony\Component\Finder\Finder;
 class ValidateDataSchemaCommand extends Command
 {
     /**
-     * @var DataSchemaValidator
-     */
-    private $dataSchemaValidator;
-
-    /**
-     * @var string
-     */
-    private $dataSchemaDir;
-
-    /**
-     * @var int
-     */
-    private $nestingDepth;
-
-    /**
      * ValidateDataSchemaCommand constructor.
      */
-    public function __construct(DataSchemaValidator $dataSchemaValidator, string $dataSchemaDir, int $nestingDepth)
-    {
-        $this->dataSchemaValidator = $dataSchemaValidator;
-        $this->dataSchemaDir       = $dataSchemaDir;
-        $this->nestingDepth        = $nestingDepth;
-
+    public function __construct(
+        private readonly DataSchemaValidator $dataSchemaValidator,
+        private readonly string $dataSchemaDir,
+        private readonly int $nestingDepth,
+    ) {
         parent::__construct();
     }
 
     /**
-     * Configure
+     * Configure.
      */
-    protected function configure()
+    protected function configure(): void
     {
         $this->setName('glavweb:data-schema:validate')
-             ->setDescription('Validates data schema configuration file')
-             ->addArgument(
-                 'path',
-                 InputArgument::OPTIONAL,
-                 'File path relative to directory defined in "data_schema.dir" bundle configuration parameter. Validates all files in folder if not specified.'
-             );
+            ->setDescription('Validates data schema configuration file')
+            ->addArgument(
+                'path',
+                InputArgument::OPTIONAL,
+                'File path relative to directory defined in "data_schema.dir" bundle configuration parameter. '.
+                'Validates all files in folder if not specified.'
+            );
     }
 
-    /**
-     * @inheritDoc
-     */
-    protected function execute(InputInterface $input, OutputInterface $output)
+    protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $dataSchemaValidator = $this->dataSchemaValidator;
-        $rootDir             = $this->dataSchemaDir;
-        $nestingDepth        = $this->nestingDepth;
+        $rootDir = $this->dataSchemaDir;
+        $nestingDepth = $this->nestingDepth;
 
         $successful = false;
-        $path       = $input->getArgument('path');
+        $path = $input->getArgument('path');
 
         $output->writeln(
             [
@@ -78,38 +60,36 @@ class ValidateDataSchemaCommand extends Command
 
                 $successful = true;
                 $output->writeln('<info>Validation successful</info>');
-
             } catch (\Exception $e) {
-                $output->writeln(sprintf('<error>%s</error>', $e->getMessage()));
+                $output->writeln(\sprintf('<error>%s</error>', $e->getMessage()));
                 $output->writeln('<error>Validation failed</error>');
             }
-
         } else {
             $finder = new Finder();
             $finder->in($rootDir)->files();
-            $totalCount  = $finder->count();
+            $totalCount = $finder->count();
             $errorsCount = 0;
 
             if (!$totalCount) {
-                $output->writeln(sprintf('<comment>Files not found in "%s" directory</comment>', $rootDir));
+                $output->writeln(\sprintf('<comment>Files not found in "%s" directory</comment>', $rootDir));
 
                 return 0;
             }
 
-            $output->writeln([sprintf('<info>Validating %s configuration files...</info>', $totalCount), '']);
+            $output->writeln([\sprintf('<info>Validating %s configuration files...</info>', $totalCount), '']);
 
             foreach ($finder as $file) {
                 try {
                     $dataSchemaValidator->validateFile($file->getRelativePathname(), $nestingDepth);
                 } catch (\Exception $e) {
-                    $errorsCount++;
+                    ++$errorsCount;
 
                     $output->writeln(
                         [
-                            sprintf('%s:', $file->getRelativePathname()),
+                            \sprintf('%s:', $file->getRelativePathname()),
                             '--------------------',
-                            sprintf('<comment>%s</comment>', $e->getMessage()),
-                            ''
+                            \sprintf('<comment>%s</comment>', $e->getMessage()),
+                            '',
                         ]
                     );
                 }
@@ -117,9 +97,8 @@ class ValidateDataSchemaCommand extends Command
 
             if ($errorsCount) {
                 $output->writeln(
-                    sprintf('<error>Validation failed. %s configuration files have errors.</error>', $errorsCount)
+                    \sprintf('<error>Validation failed. %s configuration files have errors.</error>', $errorsCount)
                 );
-
             } else {
                 $successful = true;
                 $output->writeln('<info>Validation successful</info>');

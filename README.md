@@ -31,7 +31,7 @@ public function registerBundles()
 This bundle was designed to just work out of the box. The only thing you have to configure in order to get this bundle up and running is a mapping.
 
 ```yaml
-# app/config/config.yml
+# app/config/packages/glavweb_data_schema.yaml
 
 # Add hydrators to Doctrine
 doctrine:
@@ -42,10 +42,10 @@ doctrine:
 glavweb_data_schema:
     default_hydrator_mode: DatagridHydrator
     data_schema:
-        dir: "%kernel.root_dir%/config/data_schema"
+        dir: "%kernel.project_dir%/data_schemas"
 
     scope:
-        dir: "%kernel.root_dir%/config/scopes"
+        dir: "%kernel.project_dir%/scopes"
             
 ```
 
@@ -55,7 +55,7 @@ Basic Usage
 Define data schema:
 
 ```
-# app/config/data_schema/article.schema.yml
+# app/data_schemas/article.schema.yaml
 
 schema:
     class: AppBundle\Entity\Article
@@ -69,7 +69,7 @@ schema:
 Define scope:
 
 ```
-# app/config/scopes/article/short.yml
+# app/scopes/article/short.yaml
 
 scope:
     name: 

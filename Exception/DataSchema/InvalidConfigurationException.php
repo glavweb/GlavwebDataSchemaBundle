@@ -12,12 +12,10 @@
 namespace Glavweb\DataSchemaBundle\Exception\DataSchema;
 
 use Glavweb\DataSchemaBundle\Exception\Exception;
-use Throwable;
 
 /**
- * Class InvalidConfigurationException
+ * Class InvalidConfigurationException.
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class InvalidConfigurationException extends Exception
@@ -25,17 +23,15 @@ class InvalidConfigurationException extends Exception
     /**
      * InvalidConfigurationException constructor.
      *
-     * @param array|null     $configuration
-     * @param string         $message
-     * @param int            $code
-     * @param Throwable|null $previous
+     * @param string $message
+     * @param int    $code
      */
-    public function __construct(array $configuration = null, $message = "", $code = 0, Throwable $previous = null)
+    public function __construct(?array $configuration = null, $message = '', $code = 0, ?\Throwable $previous = null)
     {
         $schemaName = $configuration['schema'] ?? null;
 
         if ($schemaName) {
-            $message = "Schema \"$schemaName\": $message";
+            $message = "Schema \"{$schemaName}\": {$message}";
         }
 
         parent::__construct($message, $code, $previous);

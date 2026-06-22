@@ -15,42 +15,38 @@ use Doctrine\Bundle\DoctrineBundle\Registry;
 use Glavweb\DataSchemaBundle\DataSchema\DataSchema;
 
 /**
- * Class PersisterFactory
+ * Class PersisterFactory.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class PersisterFactory
 {
     /**
-     * Constants for db drivers
+     * @var Registry
      */
-    const DB_DRIVER_ORM = 'orm';
+    public $doctrine;
+
+    /**
+     * Constants for db drivers.
+     */
+    public const DB_DRIVER_ORM = 'orm';
 
     /**
      * PersisterFactory constructor.
-     *
-     * @param Registry $doctrine
      */
     public function __construct(Registry $doctrine)
     {
-        $this->doctrine   = $doctrine;
+        $this->doctrine = $doctrine;
     }
 
     /**
-     * @param string $dbDriver
-     * @param DataSchema $dataSchema
      * @return EntityPersister
      */
-    public function createPersister($dbDriver, DataSchema $dataSchema)
+    public function createPersister(string $dbDriver, DataSchema $dataSchema)
     {
-        switch ($dbDriver) {
-            case self::DB_DRIVER_ORM:
-                return
-                    new EntityPersister($this->doctrine, $dataSchema);
-                break;
-        }
-
-        throw new \RuntimeException(sprintf('Db driver "%s" not support.', $dbDriver));
+        return match ($dbDriver) {
+            self::DB_DRIVER_ORM => new EntityPersister($this->doctrine, $dataSchema),
+            default => throw new \RuntimeException(\sprintf('Db driver "%s" not support.', $dbDriver)),
+        };
     }
 }

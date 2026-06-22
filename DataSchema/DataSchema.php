@@ -28,146 +28,75 @@ use Glavweb\DataSchemaBundle\Service\DataSchemaService;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
- * Class DataSchema
+ * Class DataSchema.
  *
  * @author  Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class DataSchema
 {
-
-    /**
-     * @var DataSchemaFactory
-     */
-    private $dataSchemaFactory;
-
     /**
      * @var PersisterInterface
      */
     private $persister;
 
     /**
-     * @var Placeholder
+     * @var mixed[]
      */
-    private $placeholder;
-
-    /**
-     * @var array
-     */
-    private $configuration;
-
-    /**
-     * @var array
-     */
-    private $scopeConfig;
-
-    /**
-     * @var int
-     */
-    private $nestingDepth;
-
-    /**
-     * @var string|null
-     */
-    private $defaultHydratorMode;
-
-    /**
-     * @var ObjectHydrator
-     */
-    private $objectHydrator;
-
-    /**
-     * @var DataSchemaService
-     */
-    private $dataSchemaService;
-
-    /**
-     * @var DataSchemaFilter
-     */
-    private $dataSchemaFilter;
-
-    /**
-     * @var string|null
-     */
-    private $queryLanguage;
+    private array $configuration;
 
     /**
      * DataSchema constructor.
      *
-     * @param DataSchemaFactory $dataSchemaFactory
-     * @param DataSchemaService $dataSchemaService
-     * @param DataSchemaFilter $dataSchemaFilter
-     * @param PersisterFactory $persisterFactory
-     * @param Placeholder $placeholder
-     * @param ObjectHydrator $objectHydrator
-     * @param array $configuration
-     * @param array|null $scopeConfig
-     * @param string|null $queryLanguage
-     * @param int|null $nestingDepth
-     * @param array $path
-     * @param string|null $defaultHydratorMode
+     * @param array<string, mixed> $configuration
+     *
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
-    public function __construct(DataSchemaFactory $dataSchemaFactory,
-                                DataSchemaService $dataSchemaService,
-                                DataSchemaFilter  $dataSchemaFilter,
-                                PersisterFactory  $persisterFactory,
-                                Placeholder       $placeholder,
-                                ObjectHydrator    $objectHydrator,
-                                array             $configuration,
-                                array             $scopeConfig = null,
-                                string            $queryLanguage = null,
-                                int               $nestingDepth = null,
-                                array             $path = [],
-                                string            $defaultHydratorMode = null)
+    public function __construct(private readonly DataSchemaFactory $dataSchemaFactory,
+        private readonly DataSchemaService $dataSchemaService,
+        private readonly DataSchemaFilter $dataSchemaFilter,
+        PersisterFactory $persisterFactory,
+        private readonly Placeholder $placeholder,
+        private readonly ObjectHydrator $objectHydrator,
+        array $configuration,
+        private ?array $scopeConfig = null,
+        private readonly ?string $queryLanguage = null,
+        private readonly ?int $nestingDepth = null,
+        array $path = [],
+        private readonly ?string $defaultHydratorMode = null)
     {
-        $this->dataSchemaFactory   = $dataSchemaFactory;
-        $this->dataSchemaService   = $dataSchemaService;
-        $this->dataSchemaFilter    = $dataSchemaFilter;
-        $this->placeholder         = $placeholder;
-        $this->objectHydrator      = $objectHydrator;
-        $this->nestingDepth        = $nestingDepth;
-        $this->defaultHydratorMode = $defaultHydratorMode;
-        $this->queryLanguage       = $queryLanguage;
-
-        $this->persister   = $persisterFactory->createPersister($configuration['db_driver'], $this);
-        $this->scopeConfig = $scopeConfig;
+        $this->persister = $persisterFactory->createPersister($configuration['db_driver'], $this);
 
         $this->dataSchemaService->startStopwatch('filter');
 
-        $configuration = $this->dataSchemaFilter->filter($configuration, $scopeConfig, $nestingDepth);
+        $configuration = $this->dataSchemaFilter->filter($configuration, $this->scopeConfig, $this->nestingDepth);
 
         $this->dataSchemaService->stopStopwatch('filter');
         $this->dataSchemaService->startStopwatch('prepareConfiguration');
 
-        $isRoot = empty($path);
+        $isRoot = $path === [];
         $path[] = ['type' => 'schema', 'name' => $configuration['schema']];
 
         $this->configuration =
-            $this->prepareConfiguration($configuration, $configuration['class'], $scopeConfig, $this->nestingDepth, $path);
+            $this->prepareConfiguration($configuration, $configuration['class'], $this->scopeConfig, $this->nestingDepth, $path);
 
         if ($isRoot) {
-            $this->configuration = $this->dataSchemaService->reconfigureByExtensions($this->configuration, $this->configuration, $scopeConfig, $queryLanguage);
+            $this->configuration = $this->dataSchemaService->reconfigureByExtensions(
+                $this->configuration,
+                $this->configuration,
+                $this->scopeConfig,
+                $this->queryLanguage
+            );
         }
 
         $this->dataSchemaService->stopStopwatch('prepareConfiguration');
-
     }
 
-    /**
-     * @param string $propertyName
-     * @return bool
-     */
     public function hasProperty(string $propertyName): bool
     {
         return $this->getPropertyConfiguration($propertyName) !== null;
     }
 
-    /**
-     * @param string $propertyName
-     * @return bool
-     */
     public function hasPropertyInDb(string $propertyName): bool
     {
         $propertyConfiguration = $this->getPropertyConfiguration($propertyName);
@@ -176,40 +105,30 @@ class DataSchema
             && $propertyConfiguration['from_db'];
     }
 
-    /**
-     * @param string             $condition
-     * @param string             $alias
-     * @param UserInterface|null $user
-     * @return string
-     */
-    public function conditionPlaceholder(string $condition, string $alias, UserInterface $user = null): string
+    public function conditionPlaceholder(string $condition, string $alias, ?UserInterface $user = null): string
     {
         return $this->placeholder->condition($condition, $alias, $user);
     }
 
     /**
-     * @param array $configuration
-     * @param string|null $class
-     * @param array|null $scopeConfig
-     * @param int $nestingDepth
-     * @param array $path
-     * @return array
+     * @param array<string, mixed> $configuration
+     *
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
-    protected function prepareConfiguration(array   $configuration,
-                                            ?string $class,
-                                            array   $scopeConfig = null,
-                                            int     $nestingDepth = 0,
-                                            array   $path = []): array
+    protected function prepareConfiguration(array $configuration,
+        ?string $class,
+        ?array $scopeConfig = null,
+        int $nestingDepth = 0,
+        array $path = []): array
     {
         if ($nestingDepth < 0) {
             throw new InvalidConfigurationException($configuration, "Maximum nesting depth exceeded {$this->pathToString($path)}");
         }
 
-        $class = $class ?? $configuration['class'] ?? null;
+        $class ??= $configuration['class'] ?? null;
 
-        $configuration          = array_replace(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, $configuration);
+        $configuration = array_replace(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, $configuration);
         $configuration['class'] = $class;
 
         if (!$this->dataSchemaFilter->isGranted($configuration['roles'])) {
@@ -217,36 +136,37 @@ class DataSchema
         }
 
         // class
-        $classMetadata        = $class ? $this->dataSchemaService->getClassMetadata($class) : null;
+        $classMetadata = $class ? $this->dataSchemaService->getClassMetadata($class) : null;
         $identifierFieldNames = [];
-        $discriminatorMap     = null;
+        $discriminatorMap = null;
 
         if ($classMetadata instanceof ClassMetadata) {
             if ($classMetadata->subClasses) {
-                $configuration['hasSubclasses']           = true;
+                $configuration['hasSubclasses'] = true;
                 $configuration['discriminatorColumnName'] = $classMetadata->discriminatorColumn['name'];
-                $configuration['discriminatorMap']        = $classMetadata->discriminatorMap;
-                $discriminatorMap                         = $configuration['discriminatorMap'];
+                $configuration['discriminatorMap'] = $classMetadata->discriminatorMap;
+                $discriminatorMap = $configuration['discriminatorMap'];
             }
 
             $configuration['tableName'] = $classMetadata->getTableName();
-            $identifierFieldNames       = $classMetadata->getIdentifierFieldNames();
+            $identifierFieldNames = $classMetadata->getIdentifierFieldNames();
         }
+
         $configProperties = $configuration['properties'] ?? [];
-        $properties       = [];
+        $properties = [];
 
         foreach ($identifierFieldNames as $idName) {
-            if (!array_key_exists($idName, $configProperties)) {
-                $configProperties[$idName]            = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['hidden' => true]);
+            if (!\array_key_exists($idName, $configProperties)) {
+                $configProperties[$idName] = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['hidden' => true]);
                 $configuration['properties'][$idName] = $configProperties[$idName];
             }
         }
 
         foreach ($configProperties as $propertyName => $propertyConfig) {
             $propertyScopeConfig = $scopeConfig[$propertyName] ?? null;
-            $schema              = $propertyConfig['schema'] ?? null;
-            $isNested            = $this->dataSchemaService->isNestedProperty($propertyConfig);
-            $propertyPath        = \array_merge($path, [['type' => 'property', 'name' => $propertyName]]);
+            $schema = $propertyConfig['schema'] ?? null;
+            $isNested = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $propertyPath = array_merge($path, [['type' => 'property', 'name' => $propertyName]]);
 
             if ($schema) {
                 $propertyConfig = $this->getNestedDataSchemaConfiguration(
@@ -259,7 +179,7 @@ class DataSchema
             }
 
             $discriminator = $propertyConfig['discriminator'] ?? null;
-            $subClass      = $discriminatorMap && $discriminator ? $discriminatorMap[$discriminator] ?? null : null;
+            $subClass = $discriminatorMap && $discriminator ? $discriminatorMap[$discriminator] ?? null : null;
 
             $propertyOwnerClassMetadata =
                 $subClass ? $this->dataSchemaService->getClassMetadata($subClass) : $classMetadata;
@@ -267,19 +187,16 @@ class DataSchema
             // set default description
             if (empty($propertyConfig['description']) && $propertyOwnerClassMetadata instanceof ClassMetadata
                 && $propertyOwnerClassMetadata->hasField($propertyName)) {
-
                 $fieldMapping = $propertyOwnerClassMetadata->getFieldMapping($propertyName);
-                $description  = $fieldMapping['options']['comment'] ?? null;
+                $description = $fieldMapping['options']['comment'] ?? null;
 
                 $propertyConfig['description'] = $description;
             }
 
             if ($isNested) {
                 $propertyClass = $propertyConfig['class'] ?? null;
-
                 if (!$propertyClass && $propertyOwnerClassMetadata instanceof ClassMetadata
                     && $propertyOwnerClassMetadata->hasAssociation($propertyName)) {
-
                     $propertyClass = $propertyOwnerClassMetadata->getAssociationTargetClass($propertyName);
                 }
 
@@ -290,21 +207,15 @@ class DataSchema
                     $nestingDepth - 1,
                     $propertyPath
                 );
-
                 if ($propertyConfig && $propertyOwnerClassMetadata instanceof ClassMetadata
                     && $propertyOwnerClassMetadata->hasAssociation($propertyName)) {
-
                     $isCollection = $propertyOwnerClassMetadata->isCollectionValuedAssociation($propertyName);
 
                     $propertyConfig['type'] = $isCollection ? 'collection' : 'entity';
                 }
-
-            } else if ($propertyOwnerClassMetadata instanceof ClassMetadata) {
-                $propertyConfig['type'] =
-                    $propertyConfig['type'] ?? $propertyOwnerClassMetadata->getTypeOfField($propertyName);
-
+            } elseif ($propertyOwnerClassMetadata instanceof ClassMetadata) {
+                $propertyConfig['type'] ??= $propertyOwnerClassMetadata->getTypeOfField($propertyName);
                 $propertyConfig['from_db'] = $propertyOwnerClassMetadata->hasField($propertyName);
-
                 $propertyConfig['field_db_name'] =
                     $propertyConfig['from_db'] ? $propertyOwnerClassMetadata->getColumnName($propertyName) : null;
             }
@@ -317,50 +228,43 @@ class DataSchema
         return $configuration;
     }
 
-    /**
-     * @param string $name
-     * @param string $source
-     * @return void
-     */
     public function addPropertyFromSelect(string $name, string $source): void
     {
         $this->configuration['properties'][$name] = array_merge(DataSchemaConfiguration::PROPERTIES_DEFAULT_VALUES, ['source' => $source]);
     }
 
     /**
-     * @param array      $data
-     * @param array      $config
-     * @param array|null $scopeConfig
-     * @return array
+     * @param array<string, mixed> $config
+     *
      * @throws InvalidConfigurationException
      * @throws MappingException
      * @throws NoResultException
      * @throws NonUniqueResultException
      * @throws InvalidQueryException
      */
-    private function fetchMissingPropertiesRecursive(array $data, array $config, array $scopeConfig = null): array
+    private function fetchMissingPropertiesRecursive(array $data, array $config, ?array $scopeConfig = null): array
     {
         if ($this->isOnlyNullInArray($data)) {
             return $data;
         }
 
-        $id            = $data['id'] ?? null;
-        $class         = $this->getDataClassName($config, $data);
+        $id = $data['id'] ?? null;
+        $class = $this->getDataClassName($config, $data);
         $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
-        $metadata      = $this->dataSchemaService->getClassMetadata($class);
+        $metadata = $this->dataSchemaService->getClassMetadata($class);
 
         $result = $data;
         $fields = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $propertyScopeConfig         = $scopeConfig[$propertyName] ?? [];
-            $propertyDiscriminator       = $propertyConfig['discriminator'] ?? null;
-            $isNested                    = $this->dataSchemaService->isNestedProperty($propertyConfig);
-            $isFromDb                    = $propertyConfig['from_db'] ?? false;
+            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
+            $isNested = $this->dataSchemaService->isNestedProperty($propertyConfig);
+            $isFromDb = $propertyConfig['from_db'] ?? false;
             $ignoreDiscriminatorMismatch = $propertyConfig['ignore_discriminator_mismatch'];
-            $source                      = $propertyConfig['source'] ?? null;
+            $source = $propertyConfig['source'] ?? null;
 
-            $value  = null;
+            $value = null;
 
             if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator
                 && !(
@@ -371,9 +275,8 @@ class DataSchema
             }
 
             if ($source) {
-                if (array_key_exists($propertyName, $data)) {
+                if (\array_key_exists($propertyName, $data)) {
                     $value = $data[$propertyName];
-
                 } elseif ($source !== DataSchemaConfiguration::SOURCE_SELF_TOKEN && $source === $propertyName) {
                     $querySelects = $this->getQuerySelects($config);
                     $select = $querySelects[$source] ?? null;
@@ -382,28 +285,29 @@ class DataSchema
                         $value = $id !== null ? $this->persister->getSelectQueryResult($class, $select, $id) : null;
                     }
                 }
-
-            } elseif (array_key_exists($propertyName, $data)) {
+            } elseif (\array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
 
-                if ($isNested && is_array($value)) {
+                if ($isNested && \is_array($value)) {
                     if ($this->isIterablePropertyType($propertyConfig['type'])) {
                         $value = array_map(
-                            function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                                return $this->fetchMissingPropertiesRecursive(
-                                    $itemData,
-                                    $propertyConfig,
-                                    $propertyScopeConfig
-                                );
-                            },
+                            fn (array $itemData): array => $this->fetchMissingPropertiesRecursive(
+                                $itemData,
+                                $propertyConfig,
+                                $propertyScopeConfig
+                            ),
                             $value
                         );
                     } else {
                         $value = $this->fetchMissingPropertiesRecursive($value, $propertyConfig, $propertyScopeConfig);
                     }
                 }
-            } else if ($isNested) {
-                if (!$id || !$metadata->hasAssociation($propertyName)) {
+            } elseif ($isNested) {
+                if (!$id) {
+                    continue;
+                }
+
+                if (!$metadata->hasAssociation($propertyName)) {
                     continue;
                 }
 
@@ -414,7 +318,7 @@ class DataSchema
                     $propertyScopeConfig,
                     $id
                 );
-            } else if ($isFromDb && $metadata->hasField($propertyName)) {
+            } elseif ($isFromDb && $metadata->hasField($propertyName)) {
                 $fields[] = $propertyName;
                 continue;
             } else {
@@ -436,33 +340,29 @@ class DataSchema
     }
 
     /**
-     * @param array       $data
-     * @param array       $config
-     * @param array|null  $scopeConfig
-     * @param string|null $parentClassName
-     * @param string|null $parentPropertyName
-     * @return array
+     * @param array<string, mixed> $config
+     *
      * @throws DataTransformerNotExists
      */
     private function modifyPropertiesRecursive(array $data,
-                                               array $config,
-                                               array $scopeConfig = null,
-                                               string $parentClassName = null,
-                                               string $parentPropertyName = null): array
+        array $config,
+        ?array $scopeConfig = null,
+        ?string $parentClassName = null,
+        ?string $parentPropertyName = null): array
     {
-        $class         = $this->getDataClassName($config, $data);
+        $class = $this->getDataClassName($config, $data);
         $discriminator = $config['hasSubclasses'] ? $this->getDiscriminatorValue($config, $data) : null;
-        $selects       = $this->getQuerySelects($config);
+        $selects = $this->getQuerySelects($config);
 
         $result = [];
 
         foreach ($config['properties'] as $propertyName => $propertyConfig) {
-            $value                       = null;
-            $propertyScopeConfig         = $scopeConfig[$propertyName] ?? [];
-            $propertyDiscriminator       = $propertyConfig['discriminator'] ?? null;
-            $isHidden                    = $propertyConfig['hidden'] ?? false;
-            $source                      = $propertyConfig['source'] ?? null;
-            $decode                      = $propertyConfig['decode'] ?? null;
+            $value = null;
+            $propertyScopeConfig = $scopeConfig[$propertyName] ?? [];
+            $propertyDiscriminator = $propertyConfig['discriminator'] ?? null;
+            $isHidden = $propertyConfig['hidden'] ?? false;
+            $source = $propertyConfig['source'] ?? null;
+            $decode = $propertyConfig['decode'] ?? null;
             $ignoreDiscriminatorMismatch = $propertyConfig['ignore_discriminator_mismatch'];
 
             if ($discriminator && $propertyDiscriminator && $discriminator !== $propertyDiscriminator
@@ -474,21 +374,19 @@ class DataSchema
             }
 
             if ($source && $source !== DataSchemaConfiguration::SOURCE_SELF_TOKEN) {
-                $isPostModificationSource = !empty($config['properties'][$source]['source']) && !array_key_exists($source, $selects);
+                $isPostModificationSource = !empty($config['properties'][$source]['source']) && !\array_key_exists($source, $selects);
 
-                if ($isPostModificationSource ? !array_key_exists($source, $result) : !array_key_exists($source, $data)) {
-                    throw new \RuntimeException("Property \"$source\" must be defined.");
+                if ($isPostModificationSource ? !\array_key_exists($source, $result) : !\array_key_exists($source, $data)) {
+                    throw new \RuntimeException("Property \"{$source}\" must be defined.");
                 }
 
                 $value = $isPostModificationSource ? $result[$source] : $data[$source];
-
-            } elseif (array_key_exists($propertyName, $data)) {
+            } elseif (\array_key_exists($propertyName, $data)) {
                 $value = $data[$propertyName];
-
             }
 
-            if (is_array($value)) {
-                if (!array_key_exists('type', $propertyConfig)) {
+            if (\is_array($value)) {
+                if (!\array_key_exists('type', $propertyConfig)) {
                     throw new \RuntimeException('Property "type" must be defined.');
                 }
 
@@ -504,26 +402,17 @@ class DataSchema
                             $propertyName
                         );
                     }
-
                 } elseif ($propertyConfig['type'] === 'collection') {
                     $value = array_map(
-                        function ($itemData) use (
+                        fn (array $itemData): array => $this->modifyPropertiesRecursive(
+                            $itemData,
                             $propertyConfig,
                             $propertyScopeConfig,
                             $class,
                             $propertyName
-                        ) {
-                            return $this->modifyPropertiesRecursive(
-                                $itemData,
-                                $propertyConfig,
-                                $propertyScopeConfig,
-                                $class,
-                                $propertyName
-                            );
-                        },
+                        ),
                         $value
                     );
-
                 }
             }
 
@@ -545,7 +434,7 @@ class DataSchema
 
                 $value = $this->dataSchemaService->decode($value, $decode, $transformEvent);
 
-                if (is_array($value) && $propertyScopeConfig) {
+                if (\is_array($value) && $propertyScopeConfig) {
                     $value = $this->getScopedData(
                         $value,
                         $propertyScopeConfig
@@ -560,7 +449,6 @@ class DataSchema
             if ($value === null) {
                 if ($this->isIterablePropertyType($propertyConfig['type'])) {
                     $value = [];
-
                 } elseif ($config['filter_null_values']) {
                     continue;
                 }
@@ -573,12 +461,10 @@ class DataSchema
     }
 
     /**
-     * @param ClassMetadata $metadata
-     * @param               $propertyName
-     * @param               $propertyConfig
-     * @param               $propertyScopeConfig
-     * @param               $id
+     * @param array<string, mixed> $propertyConfig
+     *
      * @return array|array[]
+     *
      * @throws InvalidConfigurationException
      * @throws MappingException
      * @throws NonUniqueResultException
@@ -586,17 +472,17 @@ class DataSchema
      * @throws NoResultException
      */
     private function fetchMissingAssociationRecursive(ClassMetadata $metadata,
-                                                      $propertyName,
-                                                      $propertyConfig,
-                                                      $propertyScopeConfig,
-                                                      $id): array
+        string $propertyName,
+        array $propertyConfig,
+        ?array $propertyScopeConfig,
+        $id): array
     {
         $associationMapping = $metadata->getAssociationMapping($propertyName);
-        $databaseFields     = $this->dataSchemaService->getDatabaseFields(
+        $databaseFields = $this->dataSchemaService->getDatabaseFields(
             $propertyConfig,
             $propertyScopeConfig
         );
-        $conditions         = $propertyConfig['conditions'];
+        $conditions = $propertyConfig['conditions'];
         $orderByExpressions = $associationMapping['orderBy'] ?? [];
 
         switch ($associationMapping['type']) {
@@ -610,13 +496,11 @@ class DataSchema
                 );
 
                 return array_map(
-                    function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                        return $this->fetchMissingPropertiesRecursive(
-                            $itemData,
-                            $propertyConfig,
-                            $propertyScopeConfig
-                        );
-                    },
+                    fn (array $itemData): array => $this->fetchMissingPropertiesRecursive(
+                        $itemData,
+                        $propertyConfig,
+                        $propertyScopeConfig
+                    ),
                     $modelData
                 );
 
@@ -630,13 +514,11 @@ class DataSchema
                 );
 
                 return array_map(
-                    function ($itemData) use ($propertyConfig, $propertyScopeConfig) {
-                        return $this->fetchMissingPropertiesRecursive(
-                            $itemData,
-                            $propertyConfig,
-                            $propertyScopeConfig
-                        );
-                    },
+                    fn (array $itemData): array => $this->fetchMissingPropertiesRecursive(
+                        $itemData,
+                        $propertyConfig,
+                        $propertyScopeConfig
+                    ),
                     $modelData
                 );
 
@@ -673,7 +555,7 @@ class DataSchema
     }
 
     /**
-     * @return array
+     * @return mixed[]
      */
     public function getConfiguration(): array
     {
@@ -681,11 +563,6 @@ class DataSchema
     }
 
     /**
-     * @param array      $data
-     * @param array|null $config
-     * @param array|null $scopeConfig
-     * @param array|null $defaultData
-     * @return array
      * @throws DataTransformerNotExists
      * @throws InvalidConfigurationException
      * @throws InvalidQueryException
@@ -694,14 +571,14 @@ class DataSchema
      * @throws NonUniqueResultException
      */
     public function getData(array $data,
-                            array $config = null,
-                            array $scopeConfig = null,
-                            ?array $defaultData = []): array
+        ?array $config = null,
+        ?array $scopeConfig = null,
+        ?array $defaultData = []): array
     {
         $this->dataSchemaService->startStopwatch('getData');
 
-        $config      = $config ?? $this->configuration;
-        $scopeConfig = $scopeConfig ?? $this->scopeConfig;
+        $config ??= $this->configuration;
+        $scopeConfig ??= $this->scopeConfig;
 
         if ($config !== $this->configuration || $scopeConfig !== $this->scopeConfig) {
             $config = $this->dataSchemaFilter->filter($config, $scopeConfig, $this->nestingDepth);
@@ -725,10 +602,6 @@ class DataSchema
     }
 
     /**
-     * @param array      $list
-     * @param array|null $config
-     * @param array|null $scopeConfig
-     * @return array
      * @throws DataTransformerNotExists
      * @throws InvalidConfigurationException
      * @throws InvalidQueryException
@@ -736,7 +609,7 @@ class DataSchema
      * @throws NoResultException
      * @throws NonUniqueResultException
      */
-    public function getList(array $list, array $config = null, array $scopeConfig = null): array
+    public function getList(array $list, ?array $config = null, ?array $scopeConfig = null): array
     {
         $this->dataSchemaService->startStopwatch('getList');
 
@@ -764,29 +637,18 @@ class DataSchema
         $this->configuration = $configuration;
     }
 
-    /**
-     * @param array|null $scopeConfig
-     */
     public function setScopeConfig(?array $scopeConfig): void
     {
         $this->scopeConfig = $scopeConfig;
     }
 
-    /**
-     * @param array|null $config
-     * @return array
-     */
-    public function getQuerySelects(array $config = null): array
+    public function getQuerySelects(?array $config = null): array
     {
-        $config = $config ?? $this->configuration;
+        $config ??= $this->configuration;
 
         return $config['query']['selects'] ?? [];
     }
 
-    /**
-     * @param string $propertyName
-     * @return array|null
-     */
     public function getPropertyConfiguration(string $propertyName): ?array
     {
         $propertyConfiguration = $this->configuration;
@@ -803,10 +665,6 @@ class DataSchema
         return $propertyConfiguration;
     }
 
-    /**
-     * @param string $propertyName
-     * @return array|null
-     */
     public function getPropertyScopeConfiguration(string $propertyName): ?array
     {
         $propertyScopeConfig = $this->scopeConfig;
@@ -823,20 +681,11 @@ class DataSchema
         return $propertyScopeConfig;
     }
 
-    /**
-     * @param callable $modify
-     * @return array
-     */
     public function modifyConfiguration(callable $modify): array
     {
         return $this->configuration = $modify($this->configuration);
     }
 
-    /**
-     * @param string $propertyPath
-     * @param callable $modify
-     * @return array
-     */
     public function modifyPropertyConfiguration(string $propertyPath, callable $modify): array
     {
         $configuration = $this->configuration;
@@ -847,7 +696,7 @@ class DataSchema
         $propertyPathParts = explode('.', $propertyPath);
         foreach ($propertyPathParts as $propertyName) {
             if (!isset($propertyConfiguration['properties'][$propertyName])) {
-                throw new \InvalidArgumentException('Property "' . $propertyPath . '" does not exist.');
+                throw new \InvalidArgumentException('Property "'.$propertyPath.'" does not exist.');
             }
 
             $properties = &$propertyConfiguration['properties'];
@@ -862,11 +711,6 @@ class DataSchema
         return $properties[$propertyKey];
     }
 
-    /**
-     * @param string $propertyPath
-     * @param string $conditionName
-     * @return self
-     */
     public function enablePropertyCondition(string $propertyPath, string $conditionName): self
     {
         $this->setPropertyConditionEnabled($propertyPath, $conditionName, true);
@@ -874,11 +718,6 @@ class DataSchema
         return $this;
     }
 
-    /**
-     * @param string $propertyPath
-     * @param string $conditionName
-     * @return self
-     */
     public function disablePropertyCondition(string $propertyPath, string $conditionName): self
     {
         $this->setPropertyConditionEnabled($propertyPath, $conditionName, false);
@@ -887,18 +726,15 @@ class DataSchema
     }
 
     /**
-     * @param string $propertyPath
-     * @param string $orderByPropertyName
-     * @param string $order
      * @return $this
      */
     public function setPropertyOrderBy(string $propertyPath, string $orderByPropertyName, string $order): self
     {
-        if (!in_array(strtolower($order), ['asc', 'desc'], true)) {
-            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"$propertyPath\" is not allowed.");
+        if (!\in_array(strtolower($order), ['asc', 'desc'], true)) {
+            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"{$propertyPath}\" is not allowed.");
         }
 
-        $this->modifyPropertyConfiguration($propertyPath, static function ($configuration) use ($order, $orderByPropertyName) {
+        $this->modifyPropertyConfiguration($propertyPath, static function (array $configuration) use ($order, $orderByPropertyName): array {
             $configuration['orderBy'] = [$orderByPropertyName => $order];
 
             return $configuration;
@@ -908,18 +744,15 @@ class DataSchema
     }
 
     /**
-     * @param string $propertyPath
-     * @param string $orderByPropertyName
-     * @param string $order
      * @return $this
      */
     public function addPropertyOrderBy(string $propertyPath, string $orderByPropertyName, string $order): self
     {
-        if (!in_array(strtolower($order), ['asc', 'desc'], true)) {
-            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"$propertyPath\" is not allowed.");
+        if (!\in_array(strtolower($order), ['asc', 'desc'], true)) {
+            throw new \InvalidArgumentException("Order option \"{$order}\" for property \"{$propertyPath}\" is not allowed.");
         }
 
-        $this->modifyPropertyConfiguration($propertyPath, static function ($configuration) use ($order, $orderByPropertyName) {
+        $this->modifyPropertyConfiguration($propertyPath, static function (array $configuration) use ($order, $orderByPropertyName): array {
             $configuration['orderBy'][$orderByPropertyName] = $order;
 
             return $configuration;
@@ -928,23 +761,20 @@ class DataSchema
         return $this;
     }
 
-    /**
-     * @param string $propertyPath
-     * @param string $conditionName
-     * @param bool $enabled
-     * @return self
-     */
     protected function setPropertyConditionEnabled(string $propertyPath, string $conditionName, bool $enabled): self
     {
-        $this->modifyPropertyConfiguration($propertyPath, static function ($config) use ($enabled, $propertyPath, $conditionName) {
-            if (!isset($config['conditions'][$conditionName])) {
-                throw new \InvalidArgumentException("Condition '$conditionName' for property '$propertyPath' is not defined.");
+        $this->modifyPropertyConfiguration(
+            $propertyPath,
+            static function (array $config) use ($enabled, $propertyPath, $conditionName): array {
+                if (!isset($config['conditions'][$conditionName])) {
+                    throw new \InvalidArgumentException("Condition '{$conditionName}' for property '{$propertyPath}' is not defined.");
+                }
+
+                $config['conditions'][$conditionName]['enabled'] = $enabled;
+
+                return $config;
             }
-
-            $config['conditions'][$conditionName]['enabled'] = $enabled;
-
-            return $config;
-        });
+        );
 
         return $this;
     }
@@ -957,55 +787,34 @@ class DataSchema
         return $this->configuration['hydration_mode'] ?? $this->defaultHydratorMode;
     }
 
-    /**
-     * @param array $data
-     * @param array $scope
-     * @return array
-     */
     protected function getScopedData(array $data, array $scope): array
     {
         $scopedData = [];
 
         foreach ($data as $key => $value) {
-            if (array_key_exists($key, $scope)) {
-                if (is_array($value) && $scope[$key]) {
-                    $scopedData[$key] = $this->getScopedData($value, $scope[$key]);
-
-                } else {
-                    $scopedData[$key] = $value;
-                }
+            if (\array_key_exists($key, $scope)) {
+                $scopedData[$key] = \is_array($value) && $scope[$key] ? $this->getScopedData($value, $scope[$key]) : $value;
             }
         }
 
         return $scopedData;
     }
 
-    /**
-     * @param string|null $type
-     * @return bool
-     */
     private function isIterablePropertyType(?string $type): bool
     {
-        return in_array($type, ['array', 'json_array', 'collection']);
+        return \in_array($type, ['array', 'json_array', 'collection'], true);
     }
 
     /**
-     * @param string $dataSchemaFile
-     * @param array $configuration
-     * @param int $nestingDepth
-     * @param array $path
-     * @param array|null $scopeConfig
-     * @return array
      * @throws InvalidConfigurationException
      * @throws MappingException
      */
     private function getNestedDataSchemaConfiguration(string $dataSchemaFile,
-                                                      array  $configuration,
-                                                      int    $nestingDepth,
-                                                      array  $path,
-                                                      array  $scopeConfig = null): array
+        array $configuration,
+        int $nestingDepth,
+        array $path,
+        ?array $scopeConfig = null): array
     {
-
         $dataSchema = $this->dataSchemaFactory->createNestedDataSchema(
             $dataSchemaFile,
             $configuration,
@@ -1017,45 +826,31 @@ class DataSchema
         return $dataSchema->getConfiguration();
     }
 
-    /**
-     * @param array $array
-     * @return bool
-     */
     private function isOnlyNullInArray(array $array): bool
     {
-        foreach ($array as $item) {
-            if ($item !== null) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all($array, static fn ($item): bool => $item === null);
     }
 
     /**
-     * @param array $config
-     * @param array $data
-     * @return string
+     * @param array<string, mixed> $config
      */
     private function getDiscriminatorValue(array $config, array $data): string
     {
         if (!$config['hasSubclasses']) {
-            throw new \InvalidArgumentException("Only class configurations with subclasses may have discriminator");
+            throw new \InvalidArgumentException('Only class configurations with subclasses may have discriminator');
         }
 
         $discriminatorColumnName = $config['discriminatorColumnName'];
 
         if (empty($data[$discriminatorColumnName])) {
-            throw new \InvalidArgumentException("Discriminator field \"$discriminatorColumnName\" must have value");
+            throw new \InvalidArgumentException("Discriminator field \"{$discriminatorColumnName}\" must have value");
         }
 
         return $data[$discriminatorColumnName];
     }
 
     /**
-     * @param array $config
-     * @param array $data
-     * @return string
+     * @param array<string, mixed> $config
      */
     private function getDataClassName(array $config, array $data): string
     {
@@ -1063,16 +858,12 @@ class DataSchema
 
         if ($config['hasSubclasses']) {
             $discriminator = $this->getDiscriminatorValue($config, $data);
-            $class         = $config['discriminatorMap'][$discriminator];
+            $class = $config['discriminatorMap'][$discriminator];
         }
 
         return $class;
     }
 
-    /**
-     * @param array $path
-     * @return string
-     */
     private function pathToString(array $path): string
     {
         $result = '';
@@ -1080,7 +871,7 @@ class DataSchema
         foreach ($path as $i => $item) {
             $prefix = $i === 0 ? '' : ($item['type'] === 'property' ? '::' : ' > ');
 
-            $result .= "$prefix{$item['name']}";
+            $result .= "{$prefix}{$item['name']}";
         }
 
         return $result;

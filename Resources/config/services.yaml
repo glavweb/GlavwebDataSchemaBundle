@@ -40,7 +40,6 @@ services:
     glavweb_data_schema.placeholder:
         class:  Glavweb\DataSchemaBundle\DataSchema\Placeholder
         arguments:
-            - "@annotation_reader"
             - "@security.helper"
             - "@twig.extension.security"
 
@@ -59,20 +58,24 @@ services:
         arguments: ["@doctrine"]
 
     # Commands
-    glavweb_data_schema.generate_data_schema_command:
-        class: Glavweb\DataSchemaBundle\Command\GenerateDataSchemaCommand
-        arguments: ["@doctrine", "@kernel", "%glavweb_data_schema.data_schema_dir%"]
-        tags:
-            - { name: console.command, command: "glavweb:data-schema" }
-
     glavweb_data_schema.validate_data_schema_command:
         class: Glavweb\DataSchemaBundle\Command\ValidateDataSchemaCommand
-        arguments: [ "@glavweb_data_schema.validator", "%glavweb_data_schema.data_schema_dir%", "%glavweb_data_schema.data_schema_max_nesting_depth%" ]
+        arguments:
+            - "@glavweb_data_schema.validator"
+            - "%glavweb_data_schema.data_schema_dir%"
+            - "%glavweb_data_schema.data_schema_max_nesting_depth%"
         tags:
             - { name: console.command, command: "glavweb:data-schema:validate" }
 
-    glavweb_data_schema.generate_scope_command:
-        class: Glavweb\DataSchemaBundle\Command\GenerateScopeCommand
-        arguments: [ "@doctrine", "@kernel", "%glavweb_data_schema.scope_dir%" ]
+    # Makers
+    glavweb_data_schema.data_schema_maker:
+        class: Glavweb\DataSchemaBundle\Maker\DataSchemaMaker
+        arguments: [ "@doctrine", "@maker.doctrine_helper", "%glavweb_data_schema.data_schema_dir%" ]
         tags:
-            - { name: console.command, command: "glavweb:scope" }
+            - { name: maker.command }
+
+    glavweb_data_schema.scope_maker:
+        class: Glavweb\DataSchemaBundle\Maker\ScopeMaker
+        arguments: [ "@doctrine", "@maker.doctrine_helper", "%glavweb_data_schema.scope_dir%" ]
+        tags:
+            - { name: maker.command }

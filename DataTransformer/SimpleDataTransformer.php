@@ -12,39 +12,28 @@
 namespace Glavweb\DataSchemaBundle\DataTransformer;
 
 /**
- * Class SimpleDataTransformer
+ * Class SimpleDataTransformer.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class SimpleDataTransformer implements DataTransformerInterface
 {
-    /**
-     * @var mixed
-     */
     private $callable;
 
     /**
      * SimpleDataTransformer constructor.
-     *
-     * @param mixed $callable
      */
     public function __construct($callable)
     {
-        if (!is_callable($callable)) {
+        if (!\is_callable($callable)) {
             throw new \RuntimeException('$callable argument must be callable.');
         }
 
         $this->callable = $callable;
     }
 
-    /**
-     * @param mixed          $value
-     * @param TransformEvent $transformEvent
-     * @return mixed
-     */
-    public function transform($value, TransformEvent $transformEvent)
+    public function transform($value, TransformEvent $transformEvent): mixed
     {
-        return call_user_func($this->callable, $value, $transformEvent);
+        return \call_user_func($this->callable, $value, $transformEvent);
     }
 }

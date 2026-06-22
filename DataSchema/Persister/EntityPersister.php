@@ -21,157 +21,92 @@ use Glavweb\DataSchemaBundle\DataSchema\DataSchema;
 use Glavweb\DataSchemaBundle\Exception\Persister\InvalidQueryException;
 
 /**
- * Class EntityPersister
+ * Class EntityPersister.
  *
  * @author  Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class EntityPersister implements PersisterInterface
 {
     /**
-     * @var Registry
-     */
-    private $doctrine;
-
-    /**
-     * @var DataSchema
-     */
-    private $dataSchema;
-
-    /**
-     * @var int
-     */
-    private $hydrationMode;
-
-    /**
      * EntityPersister constructor.
      *
-     * @param Registry $doctrine
-     * @param DataSchema $dataSchema
      * @param int $hydrationMode
      */
-    public function __construct(Registry $doctrine, DataSchema $dataSchema, $hydrationMode = Query::HYDRATE_ARRAY)
-    {
-        $this->doctrine      = $doctrine;
-        $this->dataSchema    = $dataSchema;
-        $this->hydrationMode = $hydrationMode;
+    public function __construct(
+        private readonly Registry $doctrine,
+        private readonly DataSchema $dataSchema,
+        private $hydrationMode = Query::HYDRATE_ARRAY,
+    ) {
     }
 
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
-     * @param array $orderByExpressions
-     * @return array
      * @throws InvalidQueryException
      */
-    public function getManyToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
-    {
+    public function getManyToManyData(
+        array $associationMapping,
+        $id,
+        array $databaseFields,
+        array $conditions = [],
+        array $orderByExpressions = [],
+    ): array {
         $query = $this->getQuery($associationMapping, $id, false, $databaseFields, $conditions, $orderByExpressions);
 
         return $query->getArrayResult();
     }
 
     /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
-     * @param array $orderByExpressions
-     * @return array
+     * @param array<string, mixed> $associationMapping
+     *
      * @throws InvalidQueryException
      */
-    public function getOneToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
-    {
-        $query = $this->getQuery($associationMapping, $id, false, $databaseFields, $conditions, $orderByExpressions);
-
-        return $query->getArrayResult();
-    }
-
-    /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
-     * @return array
-     * @throws InvalidQueryException
-     * @throws NonUniqueResultException
-     */
-    public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
-    {
-        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
-
-        return (array)$query->getOneOrNullResult();
-    }
-
-    /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param array $databaseFields
-     * @param array $conditions
-     * @return array
-     * @throws InvalidQueryException
-     * @throws NonUniqueResultException
-     */
-    public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = [])
-    {
-        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
-
-        return (array)$query->getOneOrNullResult();
-    }
-
-    /**
-     * @param array $associationMapping
-     * @param mixed $id
-     * @param bool  $single
-     * @param array $databaseFields
-     * @param array $conditions
-     * @param array $orderByExpressions
-     * @return Query
-     * @throws InvalidQueryException
-     */
-    protected function getQuery(array $associationMapping, $id, bool $single, array $databaseFields, array $conditions = [], array $orderByExpressions = [])
-    {
+    protected function getQuery(
+        array $associationMapping,
+        $id,
+        bool $single,
+        array $databaseFields,
+        array $conditions = [],
+        array $orderByExpressions = [],
+    ): Query {
         /** @var EntityManager $em */
         $em = $this->doctrine->getManager();
 
         $targetClass = $associationMapping['targetEntity'];
-        $joinField   = $associationMapping['isOwningSide'] ? $associationMapping['inversedBy'] : $associationMapping['mappedBy'];
+        $joinField = $associationMapping['isOwningSide'] ? $associationMapping['inversedBy'] : $associationMapping['mappedBy'];
         $targetAlias = uniqid('t', false);
         $sourceAlias = uniqid('s', false);
-        $qb          = $em->createQueryBuilder();
+        $qb = $em->createQueryBuilder();
 
         if (!$joinField) {
-            $sourceClass         = $associationMapping['sourceEntity'];
-            $sourceField         = $associationMapping['fieldName'];
+            $sourceClass = $associationMapping['sourceEntity'];
+            $sourceField = $associationMapping['fieldName'];
             $associationOperator = $single ? '=' : 'MEMBER OF';
 
             if (!$sourceField) {
-                throw new InvalidQueryException(
-                    sprintf(
-                        'The join filed part cannot be defined. May be you need configure association mapping for classes "%s" and "%s".',
-                        $associationMapping['sourceEntity'],
-                        $targetClass
-                    )
+                $message = \sprintf(
+                    'The join filed part cannot be defined. May be you need configure association mapping for classes "%s" and "%s".',
+                    $associationMapping['sourceEntity'],
+                    $targetClass
                 );
+                throw new InvalidQueryException($message);
             }
 
             $qb
-                ->select(sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
+                ->select(\sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
                 ->from($targetClass, $targetAlias)
-                ->join($sourceClass, $sourceAlias, Join::WITH,
-                    sprintf('%s %s %s.%s', $targetAlias, $associationOperator, $sourceAlias, $sourceField)
+                ->join(
+                    $sourceClass,
+                    $sourceAlias,
+                    Join::WITH,
+                    \sprintf('%s %s %s.%s', $targetAlias, $associationOperator, $sourceAlias, $sourceField)
                 )
-                ->where($sourceAlias . '.id = :sourceId')
+                ->where($sourceAlias.'.id = :sourceId')
                 ->setParameter('sourceId', $id);
-
         } else {
             $qb
-                ->select(sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
+                ->select(\sprintf('PARTIAL %s.{%s}', $targetAlias, implode(',', $databaseFields)))
                 ->from($targetClass, $targetAlias)
-                ->join(sprintf('%s.%s', $targetAlias, $joinField), $sourceAlias)
-                ->where($sourceAlias . '.id = :sourceId')
+                ->join(\sprintf('%s.%s', $targetAlias, $joinField), $sourceAlias)
+                ->where($sourceAlias.'.id = :sourceId')
                 ->setParameter('sourceId', $id);
         }
 
@@ -187,17 +122,50 @@ class EntityPersister implements PersisterInterface
         }
 
         foreach ($orderByExpressions as $sort => $direction) {
-            $qb->addOrderBy("$targetAlias.$sort", $direction);
+            $qb->addOrderBy("{$targetAlias}.{$sort}", $direction);
         }
 
         return $qb->getQuery()->setHydrationMode($this->hydrationMode);
     }
 
     /**
-     * @param string $class
-     * @param array  $properties
-     * @param int    $id
-     * @return array
+     * @throws InvalidQueryException
+     */
+    public function getOneToManyData(
+        array $associationMapping,
+        $id,
+        array $databaseFields,
+        array $conditions = [],
+        array $orderByExpressions = [],
+    ): array {
+        $query = $this->getQuery($associationMapping, $id, false, $databaseFields, $conditions, $orderByExpressions);
+
+        return $query->getArrayResult();
+    }
+
+    /**
+     * @throws InvalidQueryException
+     * @throws NonUniqueResultException
+     */
+    public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []): array
+    {
+        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
+
+        return (array) $query->getOneOrNullResult();
+    }
+
+    /**
+     * @throws InvalidQueryException
+     * @throws NonUniqueResultException
+     */
+    public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []): array
+    {
+        $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
+
+        return (array) $query->getOneOrNullResult();
+    }
+
+    /**
      * @throws NonUniqueResultException
      * @throws NoResultException
      */
@@ -208,30 +176,26 @@ class EntityPersister implements PersisterInterface
         $qb = $em->createQueryBuilder();
         $alias = 't';
 
-        if (!in_array('id', $properties, true)) {
+        if (!\in_array('id', $properties, true)) {
             $properties[] = 'id';
         }
 
         $qb
-            ->select(sprintf('PARTIAL %s.{%s}', $alias, implode(',', $properties)))
+            ->select(\sprintf('PARTIAL %s.{%s}', $alias, implode(',', $properties)))
             ->from($class, $alias)
-            ->where($alias . '.id = :id')
+            ->where($alias.'.id = :id')
             ->setParameter('id', $id);
 
         $query = $qb->getQuery();
 
-        return (array)$query->getSingleResult($this->hydrationMode);
+        return (array) $query->getSingleResult($this->hydrationMode);
     }
 
     /**
-     * @param string $class
-     * @param string  $selectClause
-     * @param int    $id
-     * @return
      * @throws NonUniqueResultException
      * @throws NoResultException
      */
-    public function getSelectQueryResult(string $class, string $selectClause, int $id)
+    public function getSelectQueryResult(string $class, string $selectClause, int $id): mixed
     {
         /** @var EntityManager $em */
         $em = $this->doctrine->getManager();
@@ -239,9 +203,9 @@ class EntityPersister implements PersisterInterface
         $alias = 't';
 
         $qb
-            ->select(sprintf('(%s)', $selectClause))
+            ->select(\sprintf('(%s)', $selectClause))
             ->from($class, $alias)
-            ->where($alias . '.id = :id')
+            ->where($alias.'.id = :id')
             ->setParameter('id', $id);
 
         $query = $qb->getQuery();

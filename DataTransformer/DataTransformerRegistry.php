@@ -14,29 +14,28 @@ namespace Glavweb\DataSchemaBundle\DataTransformer;
 use Glavweb\DataSchemaBundle\Extension\ExtensionInterface;
 
 /**
- * Class DataTransformerRegistry
+ * Class DataTransformerRegistry.
  *
  * @author Andrey Nilov <nilov@glavweb.ru>
- * @package Glavweb\DataSchemaBundle
  */
 class DataTransformerRegistry
 {
     /**
      * @var DataTransformerInterface[]
      */
-    private $registry = [];
+    private array $registry = [];
 
     /**
-     * @param DataTransformerInterface $dataTransformer
      * @param string $name
      */
-    public function add(DataTransformerInterface $dataTransformer, $name)
+    public function add(DataTransformerInterface $dataTransformer, $name): void
     {
         $this->registry[$name] = $dataTransformer;
     }
 
     /**
      * @param string $name
+     *
      * @return DataTransformerInterface
      */
     public function get($name)
@@ -46,17 +45,13 @@ class DataTransformerRegistry
 
     /**
      * @param string $name
-     * @return bool
      */
-    public function has($name)
+    public function has($name): bool
     {
         return isset($this->registry[$name]);
     }
 
-    /**
-     * @param ExtensionInterface $extension
-     */
-    public function loadExtension(ExtensionInterface $extension)
+    public function loadExtension(ExtensionInterface $extension): void
     {
         $dataTransformers = $extension->getDataTransformers();
         foreach ($dataTransformers as $name => $transformer) {

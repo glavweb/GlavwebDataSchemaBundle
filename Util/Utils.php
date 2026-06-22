@@ -3,9 +3,7 @@
 namespace Glavweb\DataSchemaBundle\Util;
 
 /**
- * Class Utils
- *
- * @package Glavweb\DataSchemaBundle\Util
+ * Class Utils.
  *
  * @author  Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
@@ -17,12 +15,10 @@ class Utils
 
         foreach ($arrays as $array) {
             foreach ($array as $key => $value) {
-                if (is_int($key)) {
+                if (\is_int($key)) {
                     $result[] = $value;
-
-                } elseif (isset($result[$key]) && is_array($result[$key]) && is_array($value)) {
+                } elseif (isset($result[$key]) && \is_array($result[$key]) && \is_array($value)) {
                     $result[$key] = self::arrayDeepMerge($result[$key], $value);
-
                 } else {
                     $result[$key] = $value;
                 }

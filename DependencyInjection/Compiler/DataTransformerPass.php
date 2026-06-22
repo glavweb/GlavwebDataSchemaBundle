@@ -18,15 +18,11 @@ use Symfony\Component\DependencyInjection\Reference;
 /**
  * Adds tagged glavweb_data_schema.data_transformer services to DataTransformerRegister service.
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class DataTransformerPass implements CompilerPassInterface
 {
-    /**
-     * @param ContainerBuilder $container
-     */
-    public function process(ContainerBuilder $container)
+    public function process(ContainerBuilder $container): void
     {
         if (!$container->hasDefinition('glavweb_data_schema.data_transformer_registry')) {
             return;
@@ -41,9 +37,9 @@ class DataTransformerPass implements CompilerPassInterface
 
             $transformerRegistryDefinition->addMethodCall('add', [new Reference($id), $tags[0]['transformer_name']]);
         }
-        
+
         // Extensions
-        foreach ($container->findTaggedServiceIds('glavweb_data_schema.extension') as $id => $tags) {
+        foreach (array_keys($container->findTaggedServiceIds('glavweb_data_schema.extension')) as $id) {
             $transformerRegistryDefinition->addMethodCall('loadExtension', [new Reference($id)]);
         }
     }

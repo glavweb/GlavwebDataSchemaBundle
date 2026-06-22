@@ -15,96 +15,38 @@ use Glavweb\DataSchemaBundle\DataSchema\DataSchemaFactory;
 use Glavweb\DataSchemaBundle\Hydrator\Doctrine\ObjectHydrator;
 
 /**
- * Class TransformConfigEvent
+ * Class TransformConfigEvent.
  *
  * @author Sergey Zvyagintsev <nitron.ru@gmail.com>
  */
 class TransformConfigEvent
 {
     /**
-     * @var string
-     */
-    private $className;
-
-    /**
-     * @var string
-     */
-    private $propertyName;
-
-    /**
-     * @var array
-     */
-    private $propertyConfig;
-
-    /**
-     * @var string
-     */
-    private $parentClassName;
-
-    /**
-     * @var string
-     */
-    private $parentPropertyName;
-
-    /**
-     * @var array
-     */
-    private $data;
-
-    /**
-     * @var ObjectHydrator
-     */
-    private $objectHydrator;
-
-    /**
-     * @var DataSchemaFactory
-     */
-    private $dataSchemaFactory;
-
-    /**
      * TransformEvent constructor.
      *
-     * @param string            $className
-     * @param string            $propertyName
-     * @param array             $propertyConfig
-     * @param string            $parentClassName
-     * @param string            $parentPropertyName
-     * @param array             $data
-     * @param ObjectHydrator    $objectHydrator
-     * @param DataSchemaFactory $dataSchemaFactory
+     * @param string $className
+     * @param string $propertyName
+     * @param string $parentClassName
+     * @param string $parentPropertyName
      */
-    public function __construct($className, $propertyName, array $propertyConfig, $parentClassName, $parentPropertyName, array $data, ObjectHydrator $objectHydrator, DataSchemaFactory $dataSchemaFactory)
-    {
-        $this->className          = $className;
-        $this->propertyName       = $propertyName;
-        $this->propertyConfig     = $propertyConfig;
-        $this->parentClassName    = $parentClassName;
-        $this->parentPropertyName = $parentPropertyName;
-        $this->data               = $data;
-        $this->objectHydrator     = $objectHydrator;
-        $this->dataSchemaFactory  = $dataSchemaFactory;
+    public function __construct(
+        private $className,
+        private $propertyName,
+        private readonly array $propertyConfig,
+        private $parentClassName,
+        private $parentPropertyName,
+        private readonly array $data,
+        private readonly ObjectHydrator $objectHydrator,
+        private readonly DataSchemaFactory $dataSchemaFactory,
+    ) {
     }
 
-    /**
-     * @return mixed
-     */
-    public function getClassName()
-    {
-        return $this->className;
-    }
-
-    /**
-     * @return mixed
-     */
     public function getPropertyName()
     {
         return $this->propertyName;
     }
 
-    /**
-     * @return array
-     */
-    public function getPropertyConfig()
+    public function getPropertyConfig(): array
     {
         return $this->propertyConfig;
     }
@@ -126,15 +68,6 @@ class TransformConfigEvent
     }
 
     /**
-     * @return array
-     */
-    public function getData()
-    {
-        return $this->data;
-    }
-
-    /**
-     * @param bool $hasAssociations
      * @return object
      */
     public function getEntity(bool $hasAssociations = true)
@@ -142,10 +75,17 @@ class TransformConfigEvent
         return $this->objectHydrator->hydrate($this->getClassName(), $this->getData(), $hasAssociations);
     }
 
-    /**
-     * @return DataSchemaFactory
-     */
-    public function getDataSchemaFactory()
+    public function getClassName()
+    {
+        return $this->className;
+    }
+
+    public function getData(): array
+    {
+        return $this->data;
+    }
+
+    public function getDataSchemaFactory(): DataSchemaFactory
     {
         return $this->dataSchemaFactory;
     }

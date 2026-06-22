@@ -12,10 +12,10 @@
 namespace Glavweb\DataSchemaBundle\Exception;
 
 /**
- * Class Exception
+ * Class Exception.
  *
- * @package Glavweb\DataSchemaBundle
  * @author Andrey Nilov <nilov@glavweb.ru>
  */
 class Exception extends \Exception
-{}
+{
+}
