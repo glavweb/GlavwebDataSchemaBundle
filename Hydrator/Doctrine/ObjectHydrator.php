@@ -12,6 +12,7 @@
 namespace Glavweb\DataSchemaBundle\Hydrator\Doctrine;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Exception;
@@ -86,10 +87,23 @@ class ObjectHydrator
     {
         $reflectionClass = new \ReflectionClass($entity);
         $metaData = $this->entityManager->getClassMetadata(get_class($entity));
+        $platform = $this->entityManager->getConnection()->getDatabasePlatform();
 
         foreach ($metaData->getFieldNames() as $propertyName) {
             if (isset($data[$propertyName])) {
-                $entity = $this->setProperty($entity, $propertyName, $data[$propertyName], $reflectionClass);
+                $value = $data[$propertyName];
+                $type  = $metaData->getTypeOfField($propertyName);
+
+                if ($type !== null) {
+                    try {
+                        $value = Type::getType($type)->convertToPHPValue($value, $platform);
+
+                    } catch (\Throwable $e) {
+                        // если значение не удалось сконвертировать — оставляем исходное
+                    }
+                }
+
+                $entity = $this->setProperty($entity, $propertyName, $value, $reflectionClass);
             }
         }
 
