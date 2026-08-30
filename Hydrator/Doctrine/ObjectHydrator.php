@@ -14,7 +14,7 @@ namespace Glavweb\DataSchemaBundle\Hydrator\Doctrine;
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Exception\ORMException;
-use Doctrine\ORM\Mapping\ClassMetadataInfo;
+use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\TransactionRequiredException;
 use Doctrine\Persistence\ObjectManager;
@@ -103,11 +103,11 @@ class ObjectHydrator
 
         foreach ($metaData->getAssociationMappings() as $propertyName => $mapping) {
             if (isset($data[$propertyName])) {
-                if (\in_array($mapping['type'], [ClassMetadataInfo::ONE_TO_ONE, ClassMetadataInfo::MANY_TO_ONE])) {
+                if ($mapping->isToOne()) {
                     $entity = $this->hydrateToOneAssociation($entity, $propertyName, $mapping, $data[$propertyName]);
                 }
 
-                if (\in_array($mapping['type'], [ClassMetadataInfo::ONE_TO_MANY, ClassMetadataInfo::MANY_TO_MANY])) {
+                if ($mapping->isToMany()) {
                     $entity = $this->hydrateToManyAssociation($entity, $propertyName, $mapping, $data[$propertyName]);
                 }
             }
@@ -116,19 +116,16 @@ class ObjectHydrator
         return $entity;
     }
 
-    /**
-     * @param array<string, mixed> $mapping
-     */
-    protected function hydrateToOneAssociation($entity, $propertyName, array $mapping, $value)
+    protected function hydrateToOneAssociation($entity, $propertyName, AssociationMapping $mapping, $value)
     {
         $reflectionClass = new \ReflectionClass($entity);
 
         if (\is_array($value)) {
-            $metaData = $this->entityManager->getClassMetadata($mapping['targetEntity']);
+            $metaData = $this->entityManager->getClassMetadata($mapping->targetEntity);
             $value = array_intersect_key($value, array_flip($metaData->getIdentifierColumnNames()));
         }
 
-        $toOneAssociationObject = $this->fetchAssociationEntity($mapping['targetEntity'], $value);
+        $toOneAssociationObject = $this->fetchAssociationEntity($mapping->targetEntity, $value);
 
         if (null !== $toOneAssociationObject) {
             return $this->setProperty($entity, $propertyName, $toOneAssociationObject, $reflectionClass);
@@ -137,10 +134,7 @@ class ObjectHydrator
         return $entity;
     }
 
-    /**
-     * @param array<string, mixed> $mapping
-     */
-    protected function hydrateToManyAssociation($entity, $propertyName, array $mapping, $value)
+    protected function hydrateToManyAssociation($entity, $propertyName, AssociationMapping $mapping, $value)
     {
         $reflectionClass = new \ReflectionClass($entity);
         $values = \is_array($value) ? $value : [$value];
@@ -148,8 +142,8 @@ class ObjectHydrator
 
         foreach ($values as $value) {
             if (\is_array($value)) {
-                $associationObjects[] = $this->hydrate($mapping['targetEntity'], $value);
-            } elseif ($associationObject = $this->fetchAssociationEntity($mapping['targetEntity'], $value)) {
+                $associationObjects[] = $this->hydrate($mapping->targetEntity, $value);
+            } elseif ($associationObject = $this->fetchAssociationEntity($mapping->targetEntity, $value)) {
                 $associationObjects[] = $associationObject;
             }
         }

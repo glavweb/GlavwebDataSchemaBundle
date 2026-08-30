@@ -13,6 +13,7 @@ namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 
 use Doctrine\Bundle\DoctrineBundle\Registry;
 use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 use Doctrine\ORM\Query;
@@ -43,7 +44,7 @@ class EntityPersister implements PersisterInterface
      * @throws InvalidQueryException
      */
     public function getManyToManyData(
-        array $associationMapping,
+        AssociationMapping $associationMapping,
         $id,
         array $databaseFields,
         array $conditions = [],
@@ -55,12 +56,10 @@ class EntityPersister implements PersisterInterface
     }
 
     /**
-     * @param array<string, mixed> $associationMapping
-     *
      * @throws InvalidQueryException
      */
     protected function getQuery(
-        array $associationMapping,
+        AssociationMapping $associationMapping,
         $id,
         bool $single,
         array $databaseFields,
@@ -132,7 +131,7 @@ class EntityPersister implements PersisterInterface
      * @throws InvalidQueryException
      */
     public function getOneToManyData(
-        array $associationMapping,
+        AssociationMapping $associationMapping,
         $id,
         array $databaseFields,
         array $conditions = [],
@@ -147,7 +146,7 @@ class EntityPersister implements PersisterInterface
      * @throws InvalidQueryException
      * @throws NonUniqueResultException
      */
-    public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []): array
+    public function getManyToOneData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []): array
     {
         $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
 
@@ -158,7 +157,7 @@ class EntityPersister implements PersisterInterface
      * @throws InvalidQueryException
      * @throws NonUniqueResultException
      */
-    public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []): array
+    public function getOneToOneData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []): array
     {
         $query = $this->getQuery($associationMapping, $id, true, $databaseFields, $conditions);
 

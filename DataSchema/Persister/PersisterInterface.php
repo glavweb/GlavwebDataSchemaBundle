@@ -11,6 +11,7 @@
 
 namespace Glavweb\DataSchemaBundle\DataSchema\Persister;
 
+use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\ORM\NoResultException;
 
@@ -24,22 +25,22 @@ interface PersisterInterface
     /**
      * @return array
      */
-    public function getManyToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
+    public function getManyToManyData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
      * @return array
      */
-    public function getOneToManyData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
+    public function getOneToManyData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
      * @return array
      */
-    public function getManyToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
+    public function getManyToOneData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     /**
      * @return array
      */
-    public function getOneToOneData(array $associationMapping, $id, array $databaseFields, array $conditions = []);
+    public function getOneToOneData(AssociationMapping $associationMapping, $id, array $databaseFields, array $conditions = []);
 
     public function getPropertiesData(string $class, array $properties, int $id): array;
 
