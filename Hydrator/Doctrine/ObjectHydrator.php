@@ -178,9 +178,70 @@ class ObjectHydrator
         }
 
         $property = $reflectionObject->getProperty($propertyName);
-        $property->setValue($entity, $value);
+        $property->setValue($entity, $this->coerceEnumValue($entity, $propertyName, $value, $reflectionObject));
 
         return $entity;
+    }
+
+    /**
+     * Native SQL rows contain backed enum columns as scalars. Reflection assignment
+     * bypasses entity setters, so convert string/int values to the property enum.
+     *
+     * @param object                $entity
+     * @param \ReflectionClass|null $reflectionObject
+     */
+    private function coerceEnumValue(object $entity, string $propertyName, mixed $value, $reflectionObject): mixed
+    {
+        if (!\is_string($value) && !\is_int($value)) {
+            return $value;
+        }
+
+        $enumType = $this->resolveEnumType($entity, $propertyName, $reflectionObject);
+        if ($enumType === null) {
+            return $value;
+        }
+
+        if (\is_string($value) && is_subclass_of($enumType, \BackedEnum::class)) {
+            $backingType = (new \ReflectionEnum($enumType))->getBackingType()?->getName();
+            if ($backingType === 'int' && is_numeric($value)) {
+                return $enumType::from((int) $value);
+            }
+        }
+
+        return $enumType::from($value);
+    }
+
+    /**
+     * @param object                $entity
+     * @param \ReflectionClass|null $reflectionObject
+     */
+    private function resolveEnumType(object $entity, string $propertyName, $reflectionObject): ?string
+    {
+        $metaData = $this->entityManager->getClassMetadata($entity::class);
+        if ($metaData->hasField($propertyName)) {
+            $mapping = $metaData->getFieldMapping($propertyName);
+            $enumType = \is_array($mapping) ? ($mapping['enumType'] ?? null) : ($mapping->enumType ?? null);
+            if (\is_string($enumType) && $enumType !== '' && is_subclass_of($enumType, \BackedEnum::class)) {
+                return $enumType;
+            }
+        }
+
+        $reflectionObject = $reflectionObject ?: new \ReflectionClass($entity);
+        if (!$reflectionObject->hasProperty($propertyName)) {
+            $parent = $reflectionObject->getParentClass();
+
+            return $parent ? $this->resolveEnumType($entity, $propertyName, $parent) : null;
+        }
+
+        $type = $reflectionObject->getProperty($propertyName)->getType();
+        if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+            $name = $type->getName();
+            if (is_subclass_of($name, \BackedEnum::class)) {
+                return $name;
+            }
+        }
+
+        return null;
     }
 
     /**
