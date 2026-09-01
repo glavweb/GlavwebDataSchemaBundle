@@ -172,9 +172,93 @@ class ObjectHydrator
         }
 
         $property = $reflectionObject->getProperty($propertyName);
-        $property->setValue($entity, $this->coerceEnumValue($entity, $propertyName, $value, $reflectionObject));
+        $value = $this->coerceEnumValue($entity, $propertyName, $value, $reflectionObject);
+        $value = $this->coerceDateTimeValue($entity, $propertyName, $value, $reflectionObject);
+        $property->setValue($entity, $value);
 
         return $entity;
+    }
+
+    /**
+     * Native SQL rows contain date/time columns as strings. Reflection assignment
+     * bypasses entity setters, so convert them to DateTime / DateTimeImmutable.
+     *
+     * @param object                $entity
+     * @param \ReflectionClass|null $reflectionObject
+     */
+    private function coerceDateTimeValue(object $entity, string $propertyName, mixed $value, $reflectionObject): mixed
+    {
+        if (!\is_string($value) || $value === '') {
+            return $value;
+        }
+
+        $dateTimeClass = $this->resolveDateTimeClass($entity, $propertyName, $reflectionObject);
+        if ($dateTimeClass === null) {
+            return $value;
+        }
+
+        try {
+            return new $dateTimeClass($value);
+        } catch (\Exception) {
+            return $value;
+        }
+    }
+
+    /**
+     * @param object                $entity
+     * @param \ReflectionClass|null $reflectionObject
+     *
+     * @return class-string<\DateTimeInterface>|null
+     */
+    private function resolveDateTimeClass(object $entity, string $propertyName, $reflectionObject): ?string
+    {
+        $metaData = $this->entityManager->getClassMetadata($entity::class);
+        if ($metaData->hasField($propertyName)) {
+            $mapping = $metaData->getFieldMapping($propertyName);
+            $typeName = \is_array($mapping) ? ($mapping['type'] ?? null) : ($mapping->type ?? null);
+            if (\is_string($typeName)) {
+                if (\str_ends_with($typeName, '_immutable') && $this->isDateTimeDoctrineType($typeName)) {
+                    return \DateTimeImmutable::class;
+                }
+                if ($this->isDateTimeDoctrineType($typeName)) {
+                    return \DateTime::class;
+                }
+            }
+        }
+
+        $reflectionObject = $reflectionObject ?: new \ReflectionClass($entity);
+        if (!$reflectionObject->hasProperty($propertyName)) {
+            $parent = $reflectionObject->getParentClass();
+
+            return $parent ? $this->resolveDateTimeClass($entity, $propertyName, $parent) : null;
+        }
+
+        $type = $reflectionObject->getProperty($propertyName)->getType();
+        if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+            $name = $type->getName();
+            if (is_a($name, \DateTimeImmutable::class, true)) {
+                return $name;
+            }
+            if (is_a($name, \DateTimeInterface::class, true)) {
+                return $name === \DateTimeInterface::class ? \DateTime::class : $name;
+            }
+        }
+
+        return null;
+    }
+
+    private function isDateTimeDoctrineType(string $typeName): bool
+    {
+        return \in_array($typeName, [
+            'date',
+            'datetime',
+            'datetimetz',
+            'time',
+            'date_immutable',
+            'datetime_immutable',
+            'datetimetz_immutable',
+            'time_immutable',
+        ], true);
     }
 
     /**
