@@ -11,13 +11,17 @@
 
 namespace Glavweb\DataSchemaBundle\Hydrator\Doctrine;
 
+use BackedEnum;
 use Doctrine\Bundle\DoctrineBundle\Registry;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\Exception\ORMException;
 use Doctrine\ORM\Mapping\AssociationMapping;
 use Doctrine\ORM\OptimisticLockException;
 use Doctrine\ORM\TransactionRequiredException;
 use Doctrine\Persistence\ObjectManager;
+use Doctrine\Common\Collections\Collection;
 
 /**
  * Class ObjectHydrator.
@@ -76,22 +80,56 @@ class ObjectHydrator
     }
 
     /**
+     * @param object $entity
      * @param array<string, mixed> $data
      *
      * @return object
+     * @throws \ReflectionException
      */
-    protected function hydrateProperties($entity, array $data)
+    protected function hydrateProperties(object $entity, array $data): object
     {
         $reflectionClass = new \ReflectionClass($entity);
-        $metaData = $this->entityManager->getClassMetadata($entity::class);
+        $metaData        = $this->entityManager->getClassMetadata($entity::class);
+        $platform        = $this->entityManager->getConnection()->getDatabasePlatform();
 
         foreach ($metaData->getFieldNames() as $propertyName) {
-            if (isset($data[$propertyName])) {
-                $entity = $this->setProperty($entity, $propertyName, $data[$propertyName], $reflectionClass);
+            if (!\array_key_exists($propertyName, $data)) {
+                continue;
             }
+
+            $value   = $data[$propertyName];
+            $mapping = $metaData->getFieldMapping($propertyName);
+            $enumType = \is_array($mapping) ? ($mapping['enumType'] ?? null) : ($mapping->enumType ?? null);
+
+            if (\is_string($enumType) && $enumType !== '' && $value !== null) {
+                $value = $value instanceof \BackedEnum ? $value : $this->buildEnum($value, $enumType);
+            } elseif ($value !== null) {
+                try {
+                    $dbalType = \is_array($mapping) ? ($mapping['type'] ?? null) : ($mapping->type ?? null);
+                    if (\is_string($dbalType) && Type::hasType($dbalType)) {
+                        $value = Type::getType($dbalType)->convertToPHPValue($value, $platform);
+                    }
+                } catch (\Throwable) {
+                    // use default value
+                }
+            }
+
+            $entity = $this->setProperty($entity, $propertyName, $value, $reflectionClass);
         }
 
         return $entity;
+    }
+
+    /**
+     * @param class-string<BackedEnum> $enumType
+     * @throws \ReflectionException
+     */
+    private function buildEnum(mixed $value, string $enumType): BackedEnum
+    {
+        $reflection  = new \ReflectionEnum($enumType);
+        $isIntBacked = $reflection->getBackingType()->getName() === 'int';
+
+        return $enumType::from($isIntBacked ? (int) $value : $value);
     }
 
     /**
@@ -172,70 +210,28 @@ class ObjectHydrator
         }
 
         $property = $reflectionObject->getProperty($propertyName);
-        $property->setValue($entity, $this->coerceEnumValue($entity, $propertyName, $value, $reflectionObject));
+        $property->setAccessible(true);
+
+        if ($property->getType() instanceof \ReflectionNamedType
+            && !$property->getType()->isBuiltin()
+            && \class_implements($property->getType()->getName(), Collection::class)
+            && \is_array($value)) {
+
+            $collection = $property->getValue($entity);
+            if ($collection instanceof Collection) {
+                $collection->clear();
+                foreach ($value as $item) {
+                    $collection->add($item);
+                }
+            } else {
+                $collection = new ArrayCollection($value);
+                $property->setValue($entity, $collection);
+            }
+        } else {
+            $property->setValue($entity, $value);
+        }
 
         return $entity;
-    }
-
-    /**
-     * Native SQL rows contain backed enum columns as scalars. Reflection assignment
-     * bypasses entity setters, so convert string/int values to the property enum.
-     *
-     * @param object                $entity
-     * @param \ReflectionClass|null $reflectionObject
-     */
-    private function coerceEnumValue(object $entity, string $propertyName, mixed $value, $reflectionObject): mixed
-    {
-        if (!\is_string($value) && !\is_int($value)) {
-            return $value;
-        }
-
-        $enumType = $this->resolveEnumType($entity, $propertyName, $reflectionObject);
-        if ($enumType === null) {
-            return $value;
-        }
-
-        if (\is_string($value) && is_subclass_of($enumType, \BackedEnum::class)) {
-            $backingType = (new \ReflectionEnum($enumType))->getBackingType()?->getName();
-            if ($backingType === 'int' && is_numeric($value)) {
-                return $enumType::from((int) $value);
-            }
-        }
-
-        return $enumType::from($value);
-    }
-
-    /**
-     * @param object                $entity
-     * @param \ReflectionClass|null $reflectionObject
-     */
-    private function resolveEnumType(object $entity, string $propertyName, $reflectionObject): ?string
-    {
-        $metaData = $this->entityManager->getClassMetadata($entity::class);
-        if ($metaData->hasField($propertyName)) {
-            $mapping = $metaData->getFieldMapping($propertyName);
-            $enumType = \is_array($mapping) ? ($mapping['enumType'] ?? null) : ($mapping->enumType ?? null);
-            if (\is_string($enumType) && $enumType !== '' && is_subclass_of($enumType, \BackedEnum::class)) {
-                return $enumType;
-            }
-        }
-
-        $reflectionObject = $reflectionObject ?: new \ReflectionClass($entity);
-        if (!$reflectionObject->hasProperty($propertyName)) {
-            $parent = $reflectionObject->getParentClass();
-
-            return $parent ? $this->resolveEnumType($entity, $propertyName, $parent) : null;
-        }
-
-        $type = $reflectionObject->getProperty($propertyName)->getType();
-        if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
-            $name = $type->getName();
-            if (is_subclass_of($name, \BackedEnum::class)) {
-                return $name;
-            }
-        }
-
-        return null;
     }
 
     /**
